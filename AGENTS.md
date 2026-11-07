@@ -1,6 +1,6 @@
 # AGENTS.md
 
-NestJS service template: HTTP, config, logs, health, metrics and PostgreSQL (Drizzle), with a sample `notes` module. Redis, RabbitMQ (events through outbox/inbox) and pg-boss (jobs) are added only when the service uses them, copied from `nest-example` ("Add a capability" in `README.md`). The human-facing description is `README.md`.
+The API of Tailor (Work Finder), created from `nest-starter`: HTTP, config, logs, health, metrics and PostgreSQL (Drizzle). Modules: `applications` (vacancies and what was sent to them) and `cv` (the CV of an application on `cv.<domain>/<application id>/<file name>`, a demo PDF for now). Redis, RabbitMQ (events through outbox/inbox) and pg-boss (jobs) are added only when the service uses them, copied from `nest-example` ("Add a capability" in `README.md`). The human-facing description is `README.md`.
 
 ## Commands
 
@@ -18,7 +18,7 @@ NestJS service template: HTTP, config, logs, health, metrics and PostgreSQL (Dri
 - `src/config/`: the Zod env schema (`env.ts`) and the `registerAs` groups (`config.ts`). Nothing else reads `process.env`.
 - `src/common/`: infrastructure without business logic, identical to `nest-example` and ready to move into a package: `http` (errors, request id, cursors, validation), `database`, `health`, `metrics`, `logging`, `openapi`, `context` (AsyncLocalStorage). Change it in `nest-example` first, then copy it here.
 - `src/db/`: Drizzle schema, types, `migrate.ts` (Argo CD Sync-hook Job before the Deployment: `node dist/db/migrate.js`).
-- `src/notes/`: the sample feature: schemas → repository → service → controller. Replace it with the service's own.
+- `src/applications/`: applications, schemas → repository → service → controller. `src/cv/`: the CV of an application, `cv.<domain>/<application id>/<file name>`; the only routes reachable from the internet (`cv.<domain>`, rewritten to `/api/v1/cv/...` in gitops).
 - `drizzle/`: SQL migrations and `meta/` (generated, never edited by hand).
 - `test/`: integration tests and the harness; unit tests sit next to the code (`*.test.ts`).
 - `Dockerfile`, `.github/workflows/ci.yml`: the image and CI follow the [service runtime contract](https://github.com/nick-lukashik/.github/blob/master/docs/service-contract.md) (kind **api**); see "Deploy" in `README.md`.
@@ -29,7 +29,7 @@ NestJS service template: HTTP, config, logs, health, metrics and PostgreSQL (Dri
 - ESM: relative imports end in `.js`. Injectable classes are imported as values, not `import type` (DI reads `emitDecoratorMetadata`). Non-classes go through a `Symbol` token (`DB`, `PG_POOL`).
 - Controllers are thin: the schema on the parameter (`@Body({ schema })`, `@Query({ schema })`), a service call. SQL lives only in `*.repository.ts`.
 - The contract is described by Zod schemas in `<feature>.schemas.ts` with `.meta({ id })`; OpenAPI (`/openapi.json`) is built from them. Responses through `@ApiOkResponse({ standardSchema })`, errors through `@ApiErrors(...)`.
-- Errors: `throw new AppError(code, message, details?)` or `notFound("Note")`. Codes: `VALIDATION_FAILED` 400, `NOT_FOUND` 404, `PAYLOAD_TOO_LARGE` 413, `RATE_LIMITED` 429 (once a rate limit is added), `INTERNAL` 500, `UNAVAILABLE` 503 (Postgres over a time budget or down: `ErrorFilter` maps it by SQLSTATE), `TIMEOUT` 504 (the 10 s request budget). Only `ErrorFilter` builds the response body; stacks, SQL and internal messages never leave the service.
+- Errors: `throw new AppError(code, message, details?)` or `notFound("Application")`. Codes: `VALIDATION_FAILED` 400, `NOT_FOUND` 404, `PAYLOAD_TOO_LARGE` 413, `RATE_LIMITED` 429 (once a rate limit is added), `INTERNAL` 500, `UNAVAILABLE` 503 (Postgres over a time budget or down: `ErrorFilter` maps it by SQLSTATE), `TIMEOUT` 504 (the 10 s request budget). Only `ErrorFilter` builds the response body; stacks, SQL and internal messages never leave the service.
 - Time budgets (service contract): request 10 s, SQL statement 5 s, lock 2 s, idle in transaction 10 s, pool wait 2 s, migration lock wait 1 s (retried), body 1 MiB. They are set once (`DATABASE_TIMEOUTS`, `REQUEST_TIMEOUT_MS`, `BODY_LIMIT`); work that needs more goes to a job (pg-boss, see nest-example), not a longer budget.
 - Degradation: readiness requires Postgres only. A dependency added later registers a check with `health.register(name, check, { required })`; a degradable one (Redis, RabbitMQ) uses `required: false`, is reported as `degraded`, never blocks startup, and has a metric for its degraded state.
 - Migrations: compatible with the code that is running (add → switch → remove, over separate releases), forward only, no long-locking DDL mixed into a feature migration, backfills as batched jobs ("Migrations" in `README.md`).

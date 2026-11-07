@@ -1,8 +1,17 @@
-# nest-starter
+# tailor-api
 
-The template of a new NestJS API on this platform: HTTP, configuration, JSON logs, health, metrics, PostgreSQL + Drizzle, Zod validation, OpenAPI, graceful shutdown, tests on Testcontainers, Dockerfile, CI. A sample `notes` module shows the layout of a feature; replace it.
+The API of Tailor: a vacancy in, a CV and a cover letter for it out, and the application tracked until an offer or a refusal. Its web app is [`tailor-web`](https://github.com/nick-lukashik/tailor-web) on `tailor.<domain>`; this API is internal to it, except the CV files on `cv.<domain>`.
 
-Redis, RabbitMQ (events through outbox/inbox) and pg-boss (jobs) are not here. A service that needs one copies it from [`nest-example`](https://github.com/nick-lukashik/nest-example), the full reference where every capability runs and is tested together. "Add a capability" below lists the steps. The shared code in `src/common/` is identical in both repos, so a capability is a folder plus its wiring.
+Created from [`nest-starter`](https://github.com/nick-lukashik/nest-starter) (`.template-version`). Now a skeleton: the `applications` module (Postgres, three demo rows from migration `0001_demo_data`) and the `cv` module (the CV of an application by its id; the same demo PDF for all, under each one's own file name). The pipeline, the CV files and sign-in come with the logic.
+
+Redis, RabbitMQ (events through outbox/inbox) and pg-boss (jobs) are not here. When a feature needs one, copy it from [`nest-example`](https://github.com/nick-lukashik/nest-example) ("Add a capability" below). The shared code in `src/common/` is identical to the starter's, so a fix there is ported from the starter (`.github` `docs/templates.md`).
+
+## Routes in prod
+
+| Host                                       | Reaches                   | How                                                                                                   |
+| ------------------------------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `cv.<domain>/<application id>/<file name>` | `GET /api/v1/cv/...` only | the gitops IngressRoute rewrites every path to `/api/v1/cv/...`, so nothing else of the API is public |
+| none                                       | everything else           | `tailor-web` calls `http://tailor-api.prod.svc` from its server (`/api` proxy, GET only for now)      |
 
 ## What is inside
 
@@ -49,23 +58,17 @@ Swagger UI: `/docs` (except with `NODE_ENV=production`), document: `/openapi.jso
 
 Prefix `/api`, version in the URI. The `x-request-id` header is accepted (if well-formed) or generated, and returned; `x-app-version` is `APP_VERSION`. CORS is off: browsers reach the API only through the web app's server.
 
-| Method and path                         | Response                                                      |
-| --------------------------------------- | ------------------------------------------------------------- |
-| `GET /api/v1/notes?limit=20&cursor=…`   | `{ items: Note[], nextCursor: string \| null }`, newest first |
-| `GET /api/v1/notes/:id`                 | `Note` or 404                                                 |
-| `POST /api/v1/notes` `{ title, body }`  | 201 `Note`                                                    |
-| `GET /health/live`, `GET /health/ready` | ready: 503 without Postgres                                   |
-| `GET /openapi.json`, `GET /docs`        | OpenAPI from the Zod schemas                                  |
+| Method and path                                                             | Response                                                                                                      |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/applications?limit=20&cursor=…`                                | `{ items: Application[], nextCursor: string \| null }`, newest first                                          |
+| `GET /api/v1/applications/:id`                                              | `Application` or 404                                                                                          |
+| `POST /api/v1/applications` `{ company, role?, vacancyUrl?, vacancyText? }` | 201 `Application` (status `new`)                                                                              |
+| `GET /api/v1/cv/:id/:fileName`                                              | the CV of application `id` inline, `no-store`, `noindex`; the canonical name is `Nick-Lukashik-<Role>-CV.pdf` |
+| `GET /api/v1/cv/:id`, a wrong name                                          | 302 to the canonical link (relative); 404 for an unknown id. Mock: the demo PDF for every application         |
+| `GET /health/live`, `GET /health/ready`                                     | ready: 503 without Postgres                                                                                   |
+| `GET /openapi.json`, `GET /docs`                                            | OpenAPI from the Zod schemas                                                                                  |
 
 Error body: `{ code, message, details?: { path, message }[], requestId }` with `code` one of `VALIDATION_FAILED` (400), `NOT_FOUND` (404), `PAYLOAD_TOO_LARGE` (413, body over 1 MiB), `RATE_LIMITED` (429), `INTERNAL` (500), `UNAVAILABLE` (503: Postgres over a time budget or down, retry later), `TIMEOUT` (504: the request exceeded 10 s; a write may still have been applied).
-
-## Start a service from this template
-
-1. Create the repo from the template (GitHub "Use this template"); its CI publishes images, the template's own does not.
-2. Rename: `name` in `package.json`, `SERVICE_NAME` in `src/config/config.ts`, `name:` in `compose.yaml`, the title label in `Dockerfile`.
-3. Replace `src/notes/` with the service's modules (layout below), its table in `src/db/schema.ts` and its tests. Move `drizzle/` to the Trash and run `pnpm db:generate --name init`.
-4. Add the capabilities the service uses (next section), and only those.
-5. gitops: `apps/<svc>/prod/` with `components/service` and `components/api`, the ConfigMap, the SealedSecret with `DATABASE_URL` (gitops `apps/README.md`).
 
 ## Add a capability
 
@@ -107,15 +110,15 @@ A dependency that hangs fails the request fast instead of filling the pool (serv
 ## Docker
 
 ```sh
-docker build --build-arg APP_VERSION=$(git rev-parse HEAD) -t nest-starter .
+docker build --build-arg APP_VERSION=$(git rev-parse HEAD) -t tailor-api .
 pnpm infra:up
 # as in Kubernetes: read-only root filesystem, no capabilities, uid 10001
 docker run --rm --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
-  --user 10001:10001 --network nest-starter_default -p 4000:3000 -p 9464:9464 \
-  -e DATABASE_URL=postgres://app:app@postgres:5432/app nest-starter
+  --user 10001:10001 --network tailor-api_default -p 4000:3000 -p 9464:9464 \
+  -e DATABASE_URL=postgres://app:app@postgres:5432/app tailor-api
 # migrations from the same image
-docker run --rm --read-only --tmpfs /tmp --user 10001:10001 --network nest-starter_default \
-  -e DATABASE_URL=postgres://app:app@postgres:5432/app nest-starter node dist/db/migrate.js
+docker run --rm --read-only --tmpfs /tmp --user 10001:10001 --network tailor-api_default \
+  -e DATABASE_URL=postgres://app:app@postgres:5432/app tailor-api node dist/db/migrate.js
 ```
 
 - Base `node:26.13.0-trixie-slim`. Stages: `deps` (pnpm from `packageManager`) → `build` (`dist/`) and `prod-deps` (`node_modules` without dev dependencies) → `runtime`.
@@ -129,7 +132,7 @@ docker run --rm --read-only --tmpfs /tmp --user 10001:10001 --network nest-start
 
 `.github/workflows/ci.yml` calls the org reusable workflows from `nick-lukashik/.github` by the moving major tag `@v1`, never `@master`:
 
-- job `ci`: `build.yml@v1` with `kind: api` and `services: postgres`. It starts a Postgres service container, exports it as `TEST_DATABASE_URL`, runs `pnpm verify` and builds the image with `APP_VERSION=<full SHA>`; on `master` it pushes the image to GHCR and outputs its digest. A change to docs only (`docs/`, `.claude/`, `*.md` at the root) skips all of it. The required check is `ci / verify`. `publish` is off while the repository is a template.
+- job `ci`: `build.yml@v1` with `kind: api` and `services: postgres`. It starts a Postgres service container, exports it as `TEST_DATABASE_URL`, runs `pnpm verify` and builds the image with `APP_VERSION=<full SHA>`; on `master` it pushes the image to GHCR and outputs its digest. A change to docs only (`docs/`, `.claude/`, `*.md` at the root) skips all of it. The required check is `ci / verify`. `publish` is on: this repository is not a template.
 - job `deploy`: on `master`, when an image was pushed: `deploy-pr.yml@v1` opens the gitops PR with the new digest. Secrets are passed explicitly, never `secrets: inherit`.
 
 `test/global-setup.ts` uses `TEST_DATABASE_URL` when it is set, else starts Postgres in Testcontainers. Plain `DATABASE_URL` is never used, because the tests truncate tables.

@@ -45,26 +45,29 @@ describe('health, OpenAPI, metrics', () => {
         expect(res.status).toBe(200)
         expect(Object.keys(res.body.paths)).toEqual(
             expect.arrayContaining([
-                '/api/v1/notes',
-                '/api/v1/notes/{id}',
+                '/api/v1/applications',
+                '/api/v1/applications/{id}',
             ]),
         )
-        expect(res.body.components.schemas.Note.required).toEqual([
+        expect(res.body.components.schemas.Application.required).toEqual([
             'id',
-            'title',
-            'body',
+            'company',
+            'role',
+            'vacancyUrl',
+            'vacancyText',
+            'status',
             'createdAt',
         ])
-        expect(res.body.paths['/api/v1/notes'].post.requestBody.content['application/json'].schema).toEqual({
-            $ref: '#/components/schemas/CreateNote',
+        expect(res.body.paths['/api/v1/applications'].post.requestBody.content['application/json'].schema).toEqual({
+            $ref: '#/components/schemas/CreateApplication',
         })
     })
 
     it('counts requests by route template', async () => {
-        await t.http().get('/api/v1/notes/01a19d24-0000-7000-8000-000000000000')
+        await t.http().get('/api/v1/applications/01a19d24-0000-7000-8000-000000000000')
         const scrape = await t.app.get(Metrics).scrape()
         expect(scrape).toMatch(
-            /http_server_requests_total\{method="GET",route="\/api\/v1\/notes\/:id",status_class="4xx"/,
+            /http_server_requests_total\{method="GET",route="\/api\/v1\/applications\/:id",status_class="4xx"/,
         )
     })
 

@@ -1,50 +1,51 @@
 import { describe, expect, it } from 'vitest'
-import { createNoteSchema, listNotesQuerySchema } from './notes.schemas.js'
+import { createApplicationSchema, listApplicationsQuerySchema } from './applications.schemas.js'
 
-describe('notes schemas', () => {
-    it('trims the title and defaults the body', () => {
+describe('applications schemas', () => {
+    it('trims the company and defaults the vacancy text', () => {
         expect(
-            createNoteSchema.parse({
-                title: '  Hi  ',
+            createApplicationSchema.parse({
+                company: '  Hi  ',
             }),
         ).toEqual({
-            title: 'Hi',
-            body: '',
+            company: 'Hi',
+            role: '',
+            vacancyText: '',
         })
     })
 
     it.each([
         [
             {
-                title: '',
+                company: '',
             },
-            'title',
+            'company',
         ],
         [
             {
-                title: '   ',
+                company: '   ',
             },
-            'title',
+            'company',
         ],
         [
             {
-                title: 'x'.repeat(201),
+                company: 'x'.repeat(201),
             },
-            'title',
+            'company',
         ],
         [
             {
-                title: 'ok',
-                body: 'x'.repeat(5001),
+                company: 'ok',
+                vacancyText: 'x'.repeat(50_001),
             },
-            'body',
+            'vacancyText',
         ],
         [
             {},
-            'title',
+            'company',
         ],
     ])('rejects %j at %s', (input, path) => {
-        const result = createNoteSchema.safeParse(input)
+        const result = createApplicationSchema.safeParse(input)
         expect(result.success).toBe(false)
         expect(result.error?.issues[0]?.path).toEqual([
             path,
@@ -52,30 +53,30 @@ describe('notes schemas', () => {
     })
 
     it('rejects unknown fields', () => {
-        const result = createNoteSchema.safeParse({
-            title: 'ok',
-            tilte: 'typo',
+        const result = createApplicationSchema.safeParse({
+            company: 'ok',
+            compnay: 'typo',
         })
         expect(result.success).toBe(false)
         expect(result.error?.issues[0]?.code).toBe('unrecognized_keys')
     })
 
     it('coerces and bounds the page size', () => {
-        expect(listNotesQuerySchema.parse({})).toEqual({
+        expect(listApplicationsQuerySchema.parse({})).toEqual({
             limit: 20,
         })
         expect(
-            listNotesQuerySchema.parse({
+            listApplicationsQuerySchema.parse({
                 limit: '5',
             }).limit,
         ).toBe(5)
         expect(
-            listNotesQuerySchema.safeParse({
+            listApplicationsQuerySchema.safeParse({
                 limit: '101',
             }).success,
         ).toBe(false)
         expect(
-            listNotesQuerySchema.safeParse({
+            listApplicationsQuerySchema.safeParse({
                 limit: '1.5',
             }).success,
         ).toBe(false)

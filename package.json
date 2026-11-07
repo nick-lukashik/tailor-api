@@ -1,8 +1,8 @@
 {
-    "name": "nest-starter",
+    "name": "tailor-api",
     "version": "0.1.0",
     "private": true,
-    "description": "NestJS service starter: HTTP, config, logs, health, metrics, Postgres + Drizzle",
+    "description": "Tailor API: applications and the CV files on cv.<domain>",
     "type": "module",
     "packageManager": "pnpm@12.16.1",
     "engines": {

@@ -6,4 +6,4 @@ import type * as schema from './schema.js'
 export type Db = NodePgDatabase<typeof schema>
 export type Tx = TxOf<Db>
 
-export type NoteRow = typeof schema.notes.$inferSelect
+export type ApplicationRow = typeof schema.applications.$inferSelect

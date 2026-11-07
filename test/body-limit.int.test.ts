@@ -5,15 +5,15 @@ import { startApp, type TestApp } from './harness.js'
 
 const MiB = 1024 * 1024
 
-/** A JSON note whose serialized size is exactly `bytes`. */
-const noteOfSize = (bytes: number) => {
+/** A JSON application whose serialized size is exactly `bytes`. */
+const applicationOfSize = (bytes: number) => {
     const empty = JSON.stringify({
-        title: 't',
-        body: '',
+        company: 't',
+        vacancyText: '',
     })
     return JSON.stringify({
-        title: 't',
-        body: 'x'.repeat(bytes - empty.length),
+        company: 't',
+        vacancyText: 'x'.repeat(bytes - empty.length),
     })
 }
 
@@ -28,10 +28,10 @@ describe('request body limit (1 MiB)', () => {
     })
 
     const post = (contentType: string, body: string) =>
-        t.http().post('/api/v1/notes').set('content-type', contentType).send(body)
+        t.http().post('/api/v1/applications').set('content-type', contentType).send(body)
 
     it('parses a JSON body of exactly 1 MiB (and then validates it)', async () => {
-        const res = await post('application/json', noteOfSize(MiB))
+        const res = await post('application/json', applicationOfSize(MiB))
         expect(res.status).toBe(400)
         expect(res.body.code).toBe('VALIDATION_FAILED')
     })
@@ -40,11 +40,11 @@ describe('request body limit (1 MiB)', () => {
         for (const [contentType, body] of [
             [
                 'application/json',
-                noteOfSize(MiB + 1),
+                applicationOfSize(MiB + 1),
             ],
             [
                 'application/x-www-form-urlencoded',
-                `title=t&body=${'x'.repeat(MiB)}`,
+                `company=t&vacancyText=${'x'.repeat(MiB)}`,
             ],
         ] as const) {
             const res = await post(contentType, body)
@@ -65,7 +65,7 @@ describe('request body limit (1 MiB)', () => {
                     host: '127.0.0.1',
                     port,
                     method: 'POST',
-                    path: '/api/v1/notes',
+                    path: '/api/v1/applications',
                     headers: {
                         'content-type': 'application/json',
                         'transfer-encoding': 'chunked',
@@ -78,7 +78,7 @@ describe('request body limit (1 MiB)', () => {
             )
             // The server may close the socket while we still write: only the answer matters.
             req.on('error', reject)
-            req.write('{"title":"t","body":"')
+            req.write('{"company":"t","vacancyText":"')
             const chunk = 'x'.repeat(64 * 1024)
             for (let sent = 0; sent < 2 * MiB; sent += chunk.length) req.write(chunk)
             req.end('"}')
