@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
-#   docker build --build-arg APP_VERSION=$(git rev-parse HEAD) -t nest-starter .
-#   docker run --rm -p 4000:3000 -p 9464:9464 --env-file .env -e PORT=3000 nest-starter
+#   docker build --build-arg APP_VERSION=$(git rev-parse HEAD) -t tailor-api .
+#   docker run --rm -p 4000:3000 -p 9464:9464 --env-file .env -e PORT=3000 tailor-api
 # APP_VERSION is the only build arg: one image runs on stage and prod, the rest
 # is runtime env. Migrations run from the same image before a rollout:
 # node dist/db/migrate.js (Argo CD Sync-hook Job, wave 0, before the Deployment).
@@ -35,7 +35,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 # it runs with a read-only root filesystem, only /tmp writable (emptyDir).
 FROM base AS runtime
 ARG APP_VERSION=dev
-LABEL org.opencontainers.image.title="nest-starter" \
+LABEL org.opencontainers.image.title="tailor-api" \
       org.opencontainers.image.version="${APP_VERSION}"
 ENV NODE_ENV=production \
     APP_VERSION=${APP_VERSION} \

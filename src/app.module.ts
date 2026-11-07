@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common'
 import type { ConfigType } from '@nestjs/config'
+import { ApplicationsModule } from './applications/applications.module.js'
 import { DatabaseModule } from './common/database/database.module.js'
 import { HealthModule } from './common/health/health.module.js'
 import { createLoggerModule } from './common/logging/logger.module.js'
 import { MetricsModule } from './common/metrics/metrics.module.js'
 import { appConfig, dbConfig } from './config/config.js'
 import { AppConfigModule } from './config/config.module.js'
+import { CvModule } from './cv/cv.module.js'
 import * as schema from './db/schema.js'
-import { NotesModule } from './notes/notes.module.js'
 
 type App = ConfigType<typeof appConfig>
 
@@ -59,7 +60,8 @@ type App = ConfigType<typeof appConfig>
                 applicationName: app.service,
             }),
         }),
-        NotesModule,
+        ApplicationsModule,
+        CvModule,
     ],
 })
 export class AppModule {}

@@ -3,7 +3,7 @@ import { startApp, type TestApp } from './harness.js'
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
-describe('notes', () => {
+describe('applications', () => {
     let t: TestApp
 
     beforeAll(async () => {
@@ -13,40 +13,43 @@ describe('notes', () => {
         await t?.close()
     })
 
-    const create = (title: string, body = '') =>
-        t.http().post('/api/v1/notes').send({
-            title,
-            body,
+    const create = (company: string, vacancyText = '') =>
+        t.http().post('/api/v1/applications').send({
+            company,
+            vacancyText,
         })
 
-    it('creates a note and echoes the request id', async () => {
+    it('creates an application and echoes the request id', async () => {
         const res = await create('  First  ', 'hello').set('x-request-id', 'test-request-0001')
         expect(res.status).toBe(201)
         expect(res.headers['x-request-id']).toBe('test-request-0001')
         expect(res.body).toEqual({
             id: expect.stringMatching(UUID_V7),
-            title: 'First',
-            body: 'hello',
+            company: 'First',
+            role: '',
+            vacancyUrl: null,
+            vacancyText: 'hello',
+            status: 'new',
             createdAt: expect.any(String),
         })
         expect(new Date(res.body.createdAt).toISOString()).toBe(res.body.createdAt)
     })
 
-    it('returns a note by id, 404 for unknown and malformed ids', async () => {
-        const { body: note } = await create('By id')
-        const found = await t.http().get(`/api/v1/notes/${note.id}`)
+    it('returns an application by id, 404 for unknown and malformed ids', async () => {
+        const { body: application } = await create('By id')
+        const found = await t.http().get(`/api/v1/applications/${application.id}`)
         expect(found.status).toBe(200)
-        expect(found.body).toEqual(note)
+        expect(found.body).toEqual(application)
 
         for (const id of [
             '01a19d24-0000-7000-8000-000000000000',
             'not-a-uuid',
         ]) {
-            const missing = await t.http().get(`/api/v1/notes/${id}`)
+            const missing = await t.http().get(`/api/v1/applications/${id}`)
             expect(missing.status).toBe(404)
             expect(missing.body).toEqual({
                 code: 'NOT_FOUND',
-                message: 'Note not found',
+                message: 'Application not found',
                 requestId: missing.headers['x-request-id'],
             })
         }
@@ -54,9 +57,9 @@ describe('notes', () => {
 
     it('lists newest first', async () => {
         await create('Newest')
-        const res = await t.http().get('/api/v1/notes?limit=50')
+        const res = await t.http().get('/api/v1/applications?limit=50')
         expect(res.status).toBe(200)
-        expect(res.body.items.map((n: { title: string }) => n.title)).toEqual([
+        expect(res.body.items.map((n: { company: string }) => n.company)).toEqual([
             'Newest',
             'By id',
             'First',
@@ -65,11 +68,11 @@ describe('notes', () => {
     })
 
     it('pages with an opaque cursor', async () => {
-        const page1 = await t.http().get('/api/v1/notes?limit=2')
+        const page1 = await t.http().get('/api/v1/applications?limit=2')
         expect(page1.body.items).toHaveLength(2)
         expect(page1.body.nextCursor).toEqual(expect.any(String))
 
-        const page2 = await t.http().get('/api/v1/notes').query({
+        const page2 = await t.http().get('/api/v1/applications').query({
             limit: 2,
             cursor: page1.body.nextCursor,
         })
@@ -83,13 +86,33 @@ describe('notes', () => {
         expect(new Set(ids).size).toBe(3)
     })
 
+    it('keeps the role and the vacancy link, and rejects a link that is not http(s)', async () => {
+        const res = await t.http().post('/api/v1/applications').send({
+            company: 'Linked',
+            role: ' Engineer ',
+            vacancyUrl: 'https://example.com/jobs/1',
+        })
+        expect(res.status).toBe(201)
+        expect(res.body).toMatchObject({
+            role: 'Engineer',
+            vacancyUrl: 'https://example.com/jobs/1',
+        })
+
+        const bad = await t.http().post('/api/v1/applications').send({
+            company: 'Linked',
+            vacancyUrl: 'javascript:alert(1)',
+        })
+        expect(bad.status).toBe(400)
+        expect(bad.body.details[0].path).toBe('vacancyUrl')
+    })
+
     it('rejects invalid input with every failing field', async () => {
         const res = await t
             .http()
-            .post('/api/v1/notes')
+            .post('/api/v1/applications')
             .send({
-                title: '',
-                body: 'x'.repeat(5001),
+                company: '',
+                vacancyText: 'x'.repeat(50_001),
             })
         expect(res.status).toBe(400)
         expect(res.body).toMatchObject({
@@ -97,15 +120,15 @@ describe('notes', () => {
             requestId: expect.any(String),
         })
         expect(res.body.details.map((d: { path: string }) => d.path)).toEqual([
-            'title',
-            'body',
+            'company',
+            'vacancyText',
         ])
 
-        const query = await t.http().get('/api/v1/notes?limit=0')
+        const query = await t.http().get('/api/v1/applications?limit=0')
         expect(query.status).toBe(400)
         expect(query.body.details[0].path).toBe('limit')
 
-        const cursor = await t.http().get('/api/v1/notes?cursor=forged')
+        const cursor = await t.http().get('/api/v1/applications?cursor=forged')
         expect(cursor.status).toBe(400)
         expect(cursor.body.details).toEqual([
             {
@@ -114,7 +137,7 @@ describe('notes', () => {
             },
         ])
 
-        const json = await t.http().post('/api/v1/notes').set('content-type', 'application/json').send('{oops')
+        const json = await t.http().post('/api/v1/applications').set('content-type', 'application/json').send('{oops')
         expect(json.status).toBe(400)
         expect(json.body.code).toBe('VALIDATION_FAILED')
     })

@@ -11,7 +11,7 @@ const elapsedSince = (started: number) => performance.now() - started
 describe('Postgres time budgets', () => {
     let t: TestApp
     let pool: pg.Pool
-    let noteId: string
+    let applicationId: string
     const holder = () =>
         new pg.Client({
             connectionString: inject('databaseUrl'),
@@ -20,10 +20,10 @@ describe('Postgres time budgets', () => {
     beforeAll(async () => {
         t = await startApp()
         pool = t.app.get<pg.Pool>(PG_POOL)
-        const created = await t.http().post('/api/v1/notes').send({
-            title: 'locked',
+        const created = await t.http().post('/api/v1/applications').send({
+            company: 'locked',
         })
-        noteId = created.body.id
+        applicationId = created.body.id
     })
     afterAll(async () => {
         await t?.close()
@@ -48,9 +48,9 @@ describe('Postgres time budgets', () => {
         try {
             // What a migration's ALTER TABLE holds: even plain reads wait for it.
             await migration.query('begin')
-            await migration.query('lock table notes in access exclusive mode')
+            await migration.query('lock table applications in access exclusive mode')
             const started = performance.now()
-            const res = await t.http().get(`/api/v1/notes/${noteId}`)
+            const res = await t.http().get(`/api/v1/applications/${applicationId}`)
             const elapsed = elapsedSince(started)
             expect(res.status).toBe(503)
             expect(res.body).toEqual({
@@ -69,7 +69,7 @@ describe('Postgres time budgets', () => {
                 reason: 'lock_timeout',
             }),
         ).toBeGreaterThanOrEqual(1)
-        const again = await t.http().get(`/api/v1/notes/${noteId}`)
+        const again = await t.http().get(`/api/v1/applications/${applicationId}`)
         expect(again.status).toBe(200)
         expect(pool.waitingCount).toBe(0)
     })
@@ -79,14 +79,16 @@ describe('Postgres time budgets', () => {
         await other.connect()
         try {
             await other.query('begin')
-            await other.query('select id from notes where id = $1 for update', [
-                noteId,
+            await other.query('select id from applications where id = $1 for update', [
+                applicationId,
             ])
             const started = performance.now()
-            const failure = await t.db.execute(sql`update notes set title = 'changed' where id = ${noteId}`).then(
-                () => undefined,
-                (error: unknown) => databaseFailure(error),
-            )
+            const failure = await t.db
+                .execute(sql`update applications set company = 'changed' where id = ${applicationId}`)
+                .then(
+                    () => undefined,
+                    (error: unknown) => databaseFailure(error),
+                )
             const elapsed = elapsedSince(started)
             expect(failure).toBe('lock_timeout')
             expect(elapsed).toBeGreaterThan(1_800)
@@ -96,7 +98,9 @@ describe('Postgres time budgets', () => {
             await other.end()
         }
         // The connection went back to the pool in a usable state.
-        await expect(t.db.execute(sql`update notes set title = 'changed' where id = ${noteId}`)).resolves.toBeDefined()
+        await expect(
+            t.db.execute(sql`update applications set company = 'changed' where id = ${applicationId}`),
+        ).resolves.toBeDefined()
     })
 
     it('answers 503 within about 2 s when no pool connection is free, then recovers', async () => {
@@ -111,7 +115,7 @@ describe('Postgres time budgets', () => {
         )
         try {
             const started = performance.now()
-            const res = await t.http().get(`/api/v1/notes/${noteId}`)
+            const res = await t.http().get(`/api/v1/applications/${applicationId}`)
             const elapsed = elapsedSince(started)
             expect(res.status).toBe(503)
             expect(res.body.message).toBe('Database is busy, retry later')
@@ -120,7 +124,7 @@ describe('Postgres time budgets', () => {
         } finally {
             for (const client of held) client.release()
         }
-        const again = await t.http().get(`/api/v1/notes/${noteId}`)
+        const again = await t.http().get(`/api/v1/applications/${applicationId}`)
         expect(again.status).toBe(200)
         expect(pool.totalCount).toBeLessThanOrEqual(max)
     })

@@ -2,7 +2,7 @@ import { registerAs } from '@nestjs/config'
 import { env } from './env.js'
 
 /** Service name: logs, metrics, connection names. Rename it with the repo. */
-export const SERVICE_NAME = 'nest-starter'
+export const SERVICE_NAME = 'tailor-api'
 
 export const appConfig = registerAs('app', () => ({
     service: SERVICE_NAME,

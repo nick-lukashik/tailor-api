@@ -45,14 +45,14 @@ describe('migrations and locks', () => {
         writeFileSync(join(folder, `${tag}.sql`), statement)
         return folder
     }
-    /** Another session reading notes in an open transaction: holds ACCESS SHARE. */
+    /** Another session reading applications in an open transaction: holds ACCESS SHARE. */
     const reader = async () => {
         const client = new pg.Client({
             connectionString: url,
         })
         await client.connect()
         await client.query('begin')
-        await client.query('lock table notes in access share mode')
+        await client.query('lock table applications in access share mode')
         return client
     }
     const columns = async () => {
@@ -62,7 +62,7 @@ describe('migrations and locks', () => {
         await client.connect()
         const { rows } = await client.query<{
             column_name: string
-        }>(`select column_name from information_schema.columns where table_name = 'notes'`)
+        }>(`select column_name from information_schema.columns where table_name = 'applications'`)
         await client.end()
         return rows.map(row => row.column_name)
     }
@@ -89,10 +89,14 @@ describe('migrations and locks', () => {
     it("waits for a lock less than the app's budget, so queued queries still get through, then retries", async () => {
         const holder = await reader()
         const retries: number[] = []
-        const migrated = runMigrations(url, migration('0100_extra', 'ALTER TABLE "notes" ADD COLUMN "extra" text;'), {
-            retryDelayMs: () => 300,
-            onRetry: attempt => retries.push(attempt),
-        })
+        const migrated = runMigrations(
+            url,
+            migration('0100_extra', 'ALTER TABLE "applications" ADD COLUMN "extra" text;'),
+            {
+                retryDelayMs: () => 300,
+                onRetry: attempt => retries.push(attempt),
+            },
+        )
         await new Promise(resolve => setTimeout(resolve, 200))
 
         // Queued behind the waiting ALTER, with the app's 2 s lock budget.
@@ -102,7 +106,7 @@ describe('migrations and locks', () => {
         })
         await app.connect()
         const started = performance.now()
-        await expect(app.query('select count(*) from notes')).resolves.toBeDefined()
+        await expect(app.query('select count(*) from applications')).resolves.toBeDefined()
         expect(elapsedSince(started)).toBeLessThan(1_500)
         await app.end()
 
@@ -118,7 +122,7 @@ describe('migrations and locks', () => {
         try {
             const failure = await runMigrations(
                 url,
-                migration('0101_blocked', 'ALTER TABLE "notes" ADD COLUMN "blocked" text;'),
+                migration('0101_blocked', 'ALTER TABLE "applications" ADD COLUMN "blocked" text;'),
                 {
                     attempts: 2,
                     retryDelayMs: () => 100,
