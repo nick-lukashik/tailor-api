@@ -4,9 +4,8 @@ import { ApplicationsRepository } from './applications.repository.js'
 import { ApplicationsService } from './applications.service.js'
 
 /**
- * Sample module: the layout of a feature (schemas → repository → service →
- * controller) on Postgres. Rename or replace it; its full version with cache,
- * events and a job is in nest-example.
+ * Applications: a vacancy and what was sent to it (schemas → repository →
+ * service → controller). ApplicationsService is exported for the CV files.
  */
 @Module({
     controllers: [
@@ -14,6 +13,9 @@ import { ApplicationsService } from './applications.service.js'
     ],
     providers: [
         ApplicationsRepository,
+        ApplicationsService,
+    ],
+    exports: [
         ApplicationsService,
     ],
 })

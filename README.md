@@ -2,16 +2,16 @@
 
 The API of Tailor: a vacancy in, a CV and a cover letter for it out, and the application tracked until an offer or a refusal. Its web app is [`tailor-web`](https://github.com/nick-lukashik/tailor-web) on `tailor.<domain>`; this API is internal to it, except the CV files on `cv.<domain>`.
 
-Created from [`nest-starter`](https://github.com/nick-lukashik/nest-starter) (`.template-version`). Now a skeleton: the `applications` module (Postgres, three demo rows from migration `0001_demo_data`) and the `cv` module (one demo PDF). The pipeline, the CV files and sign-in come with the logic.
+Created from [`nest-starter`](https://github.com/nick-lukashik/nest-starter) (`.template-version`). Now a skeleton: the `applications` module (Postgres, three demo rows from migration `0001_demo_data`) and the `cv` module (the CV of an application by its id; the same demo PDF for all, under each one's own file name). The pipeline, the CV files and sign-in come with the logic.
 
 Redis, RabbitMQ (events through outbox/inbox) and pg-boss (jobs) are not here. When a feature needs one, copy it from [`nest-example`](https://github.com/nick-lukashik/nest-example) ("Add a capability" below). The shared code in `src/common/` is identical to the starter's, so a fix there is ported from the starter (`.github` `docs/templates.md`).
 
 ## Routes in prod
 
-| Host | Reaches | How |
-| ---- | ------- | --- |
-| `cv.<domain>/<code>` | `GET /api/v1/cv/<code>` only | the gitops IngressRoute rewrites every path to `/api/v1/cv/...`, so nothing else of the API is public |
-| none | everything else | `tailor-web` calls `http://tailor-api.prod.svc` from its server (`/api` proxy, GET only for now) |
+| Host                 | Reaches                      | How                                                                                                   |
+| -------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `cv.<domain>/<application id>/<file name>` | `GET /api/v1/cv/...` only | the gitops IngressRoute rewrites every path to `/api/v1/cv/...`, so nothing else of the API is public |
+| none                 | everything else              | `tailor-web` calls `http://tailor-api.prod.svc` from its server (`/api` proxy, GET only for now)      |
 
 ## What is inside
 
@@ -58,14 +58,15 @@ Swagger UI: `/docs` (except with `NODE_ENV=production`), document: `/openapi.jso
 
 Prefix `/api`, version in the URI. The `x-request-id` header is accepted (if well-formed) or generated, and returned; `x-app-version` is `APP_VERSION`. CORS is off: browsers reach the API only through the web app's server.
 
-| Method and path                         | Response                                                      |
-| --------------------------------------- | ------------------------------------------------------------- |
-| `GET /api/v1/applications?limit=20&cursor=…` | `{ items: Application[], nextCursor: string \| null }`, newest first |
-| `GET /api/v1/applications/:id`          | `Application` or 404                                          |
-| `POST /api/v1/applications` `{ company, role?, vacancyUrl?, vacancyText? }` | 201 `Application` (status `new`) |
-| `GET /api/v1/cv/:code`                  | the PDF inline, `no-store`, `noindex`; 404 for an unknown code. Mock: only `demo` |
-| `GET /health/live`, `GET /health/ready` | ready: 503 without Postgres                                   |
-| `GET /openapi.json`, `GET /docs`        | OpenAPI from the Zod schemas                                  |
+| Method and path                                                             | Response                                                                          |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `GET /api/v1/applications?limit=20&cursor=…`                                | `{ items: Application[], nextCursor: string \| null }`, newest first              |
+| `GET /api/v1/applications/:id`                                              | `Application` or 404                                                              |
+| `POST /api/v1/applications` `{ company, role?, vacancyUrl?, vacancyText? }` | 201 `Application` (status `new`)                                                  |
+| `GET /api/v1/cv/:id/:fileName`          | the CV of application `id` inline, `no-store`, `noindex`; the canonical name is `Nick-Lukashik-<Role>-CV.pdf` |
+| `GET /api/v1/cv/:id`, a wrong name     | 302 to the canonical link (relative); 404 for an unknown id. Mock: the demo PDF for every application |
+| `GET /health/live`, `GET /health/ready`                                     | ready: 503 without Postgres                                                       |
+| `GET /openapi.json`, `GET /docs`                                            | OpenAPI from the Zod schemas                                                      |
 
 Error body: `{ code, message, details?: { path, message }[], requestId }` with `code` one of `VALIDATION_FAILED` (400), `NOT_FOUND` (404), `PAYLOAD_TOO_LARGE` (413, body over 1 MiB), `RATE_LIMITED` (429), `INTERNAL` (500), `UNAVAILABLE` (503: Postgres over a time budget or down, retry later), `TIMEOUT` (504: the request exceeded 10 s; a write may still have been applied).
 

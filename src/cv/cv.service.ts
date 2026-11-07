@@ -1,29 +1,36 @@
 import { Injectable } from '@nestjs/common'
-import { notFound } from '../common/http/app-error.js'
+import { ApplicationsService } from '../applications/applications.service.js'
+import { cvFileName } from './cv-file-name.js'
 import { buildDemoPdf } from './demo-pdf.js'
 
-/** The mock code: `cv.<domain>/demo`. Real codes and files come with the pipeline. */
-export const DEMO_CODE = 'demo'
+/** Whose CV it is. A constant until the owner's profile is stored. */
+export const CV_OWNER = 'Nick Lukashik'
 
 export type CvFile = {
     fileName: string
     content: Buffer
 }
 
-/** CV files by their public code. A mock for now: one demo file, nothing stored. */
+/**
+ * The CV of an application, by its id: `cv.<domain>/<application id>/<file name>`.
+ * A mock for now: every application gets the same demo PDF under its own name;
+ * the real files (R2) come with the pipeline.
+ */
 @Injectable()
 export class CvService {
-    private readonly demo: CvFile = {
-        fileName: 'cv.pdf',
-        content: buildDemoPdf([
-            'Tailor',
-            'A demo CV: the real files arrive with the pipeline.',
-        ]),
-    }
+    private readonly demo = buildDemoPdf([
+        'Tailor',
+        'A demo CV: the real files arrive with the pipeline.',
+    ])
 
-    /** An unknown or malformed code is the same 404. */
-    get(code: string): CvFile {
-        if (code !== DEMO_CODE) throw notFound('CV')
-        return this.demo
+    constructor(private readonly applications: ApplicationsService) {}
+
+    /** An unknown or malformed id is a 404 (ApplicationsService.get). */
+    async get(applicationId: string): Promise<CvFile> {
+        const application = await this.applications.get(applicationId)
+        return {
+            fileName: cvFileName(CV_OWNER, application.role),
+            content: this.demo,
+        }
     }
 }
