@@ -11,6 +11,7 @@ import { appConfig, authConfig, dbConfig } from './config/config.js'
 import { AppConfigModule } from './config/config.module.js'
 import { CvModule } from './cv/cv.module.js'
 import * as schema from './db/schema.js'
+import { MasterCvModule } from './master-cv/master-cv.module.js'
 import { ProfileModule } from './profile/profile.module.js'
 
 type App = ConfigType<typeof appConfig>
@@ -77,6 +78,7 @@ type App = ConfigType<typeof appConfig>
         ApplicationsModule,
         CvModule,
         ProfileModule,
+        MasterCvModule,
     ],
 })
 export class AppModule {}

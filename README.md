@@ -2,7 +2,7 @@
 
 The API of Tailor: a vacancy in, a CV and a cover letter for it out, and the application tracked until an offer or a refusal. Its web app is [`tailor-web`](https://github.com/nick-lukashik/tailor-web) on `tailor.<domain>`; this API is internal to it, except the CV files on `cv.<domain>`.
 
-Created from [`nest-starter`](https://github.com/nick-lukashik/nest-starter) (`.template-version`). Modules: `access` (id-api access tokens and the allowlist), `applications` (the person's own; three demo rows without a person from migration `0001_demo_data`, listed to nobody), `profile` (the person's profile document, versions and snapshots) and `cv` (the CV of an application by its id; the same demo PDF for all, under each one's own file name). The pipeline and the CV files come with the logic.
+Created from [`nest-starter`](https://github.com/nick-lukashik/nest-starter) (`.template-version`). Modules: `access` (id-api access tokens and the allowlist), `applications` (the person's own; three demo rows without a person from migration `0001_demo_data`, listed to nobody), `profile` (the person's profile document, versions and snapshots), `master-cv` (a PDF of the profile without a vacancy, built by [`tailor-tex`](https://github.com/nick-lukashik/tailor-tex)) and `cv` (the CV of an application by its id; the same demo PDF for all, under each one's own file name). The pipeline and the CV files come with the logic.
 
 Redis, RabbitMQ (events through outbox/inbox) and pg-boss (jobs) are not here. When a feature needs one, copy it from [`nest-example`](https://github.com/nick-lukashik/nest-example) ("Add a capability" below). The shared code in `src/common/` is identical to the starter's, so a fix there is ported from the starter (`.github` `docs/templates.md`).
 
@@ -69,12 +69,13 @@ Every `/api/v1` route but `/api/v1/cv/*` needs `Authorization: Bearer <access to
 | `GET /api/v1/profile`                                                       | `{ version, updatedAt, document }`; 404 before the first save                                                 |
 | `PUT /api/v1/profile` the whole document                                    | `{ version, sha256, updatedAt }`: version + 1 and a snapshot; 400 with every bad path; `{}` is an empty one   |
 | `GET /api/v1/profile/schema`                                                | JSON Schema (draft 2020-12) of the document, for editors                                                      |
+| `GET /api/v1/profile/cv.pdf`                                                | the master CV ("Master CV" below): `application/pdf` inline, `private, no-store`; 404 without a profile       |
 | `GET /api/v1/cv/:id/:fileName`                                              | the CV of application `id` inline, `no-store`, `noindex`; the canonical name is `Nick-Lukashik-<Role>-CV.pdf` |
 | `GET /api/v1/cv/:id`, a wrong name                                          | 302 to the canonical link (relative); 404 for an unknown id. Mock: the demo PDF for every application         |
 | `GET /health/live`, `GET /health/ready`                                     | ready: 503 without Postgres                                                                                   |
 | `GET /openapi.json`, `GET /docs`                                            | OpenAPI from the Zod schemas                                                                                  |
 
-Error body: `{ code, message, details?: { path, message }[], requestId }` with `code` one of `VALIDATION_FAILED` (400), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_INVITED` (403: signed in, not on `TAILOR_USERS`), `NOT_FOUND` (404), `PAYLOAD_TOO_LARGE` (413, body over 1 MiB), `RATE_LIMITED` (429), `INTERNAL` (500), `UNAVAILABLE` (503: Postgres over a time budget or down, retry later), `TIMEOUT` (504: the request exceeded 10 s; a write may still have been applied).
+Error body: `{ code, message, details?: { path, message }[], requestId }` with `code` one of `VALIDATION_FAILED` (400), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_INVITED` (403: signed in, not on `TAILOR_USERS`), `NOT_FOUND` (404), `PAYLOAD_TOO_LARGE` (413, body over 1 MiB), `UNPROCESSABLE` (422: the profile does not make a CV), `RATE_LIMITED` (429), `INTERNAL` (500), `UNAVAILABLE` (503: Postgres or tailor-tex over a time budget or down, retry later), `TIMEOUT` (504: the request exceeded its budget, 10 s unless the route has its own; a write may still have been applied).
 
 ## Profile
 
@@ -83,6 +84,18 @@ The data a CV, the texts and the form answers are built from (notes `tailor/02-c
 - **Stored by section.** `profiles` has one row per user and a jsonb column per section, so a pipeline step reads only its slice (D-93). The document is written whole (D-98): the screen of tailor-web is a JSON editor.
 - **Versions.** Every save bumps `profiles.version` and writes `profile_snapshots { user_id, version, document, sha256 }` in the same transaction; `sha256` is of the canonical JSON (sorted keys). A CV will point at the snapshot it was built from.
 - **Size.** A profile with a few hundred cases fits the 1 MiB body limit.
+
+## Master CV
+
+`GET /api/v1/profile/cv.pdf` is the person's profile as a PDF, without a vacancy and without a model (notes `tailor/02-cv`, "Мастер-CV"): it checks the whole way to a PDF before the pipeline exists. `buildMasterCv` (`src/master-cv/master-cv.ts`, pure) turns the profile into tailor-tex's `CvDocument` (`src/tex/cv-document.ts`, a copy of tailor-tex's schema), ported from Atelier's assemble and selection:
+
+- Header: the English name (D-99), city and country, the phone, the first target role's headline (else `career.headline`), `career.stackLine`, the links (the e-mail and Telegram added when no link has them; at most 8).
+- Summary: the first two `summary` entries, `full` (else `compact`). Skills: every row with items, in order.
+- Experience: employments by `order` without the AI-only ones; each has its `fixedBullets`, then its active cases in the profile's order, `full` variant, up to `quota.general.target` (all active cases without a quota), one case per `achievementGroup` on the whole CV.
+- Education (degrees) and languages (`note`, else the level; `none` left out). Dates print as `Mar 2022 – Present`.
+- A profile that cannot make one (no phone, no summary, a value over a template limit) is a 422 before any build, each issue at its profile section (`person.phone`, `employments`, …). The file name is `cvFileName(name, headline)`: `<First>-<Last>-<Role>-CV.pdf`.
+
+The PDF comes from tailor-tex `POST /api/v1/cv/render` (template `minimal-violet`, `settings.maxPages`) with `TAILOR_TEX_TOKEN` and is streamed through. Its answers map to: 422 (TeX error or more pages than allowed: its message and log tail; a value it refused), 503 (busy, down, a wrong token; `TAILOR_TEX_TOKEN` unset: "PDF rendering is not configured"), 504 (its build budget, or 60 s here). The person closing the tab aborts the build.
 
 ## Add a capability
 
@@ -103,12 +116,16 @@ A dependency that hangs fails the request fast instead of filling the pool (serv
 | Budget                               | Value                      | Where                                                                                               | When exceeded                                                                                           |
 | ------------------------------------ | -------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | Whole request                        | 10 s                       | `RequestTimeoutInterceptor` (`src/common/http/request-timeout.ts`)                                  | 504 `TIMEOUT`; `http_server_request_timeouts_total`                                                     |
+| Whole request, master CV PDF         | **65 s** (contract: 10 s)  | `@RequestBudget` on the route (`src/request-budget.ts`, `MASTER_CV_REQUEST_BUDGET_MS`)              | 504 `TIMEOUT`                                                                                           |
+| tailor-tex render                    | 60 s                       | `TEX_RENDER_TIMEOUT_MS` (`src/tex/tailor-tex.client.ts`); tailor-tex itself stops a build at 45 s   | 504 `TIMEOUT`                                                                                           |
 | SQL statement                        | 5 s                        | `statement_timeout`, a startup parameter of every pool connection (`DATABASE_TIMEOUTS`)             | 503 `UNAVAILABLE`                                                                                       |
 | Waiting for a lock                   | 2 s                        | `lock_timeout` (row and table locks, e.g. a migration's `ALTER TABLE`)                              | 503 `UNAVAILABLE`                                                                                       |
 | Transaction idle without a statement | 10 s                       | `idle_in_transaction_session_timeout`: the server ends a leaked transaction                         | the connection is closed and replaced                                                                   |
 | Waiting for a pool connection        | 2 s                        | `connectionTimeoutMillis`; the pool is bounded by `DATABASE_POOL_MAX` (10)                          | 503 `UNAVAILABLE` ("Database is busy")                                                                  |
 | Request body                         | 1 MiB                      | the JSON and urlencoded body parsers (`BODY_LIMIT` in `src/app.setup.ts`), also chunked             | 413 `PAYLOAD_TOO_LARGE`                                                                                 |
 | Migration waiting for a lock         | 1 s per run, up to 10 runs | `lock_timeout` of the migration connection (`MIGRATION_LOCKS` in `src/common/database/database.ts`) | the run is rolled back and repeated after 1–10 s; after about 1 min the Job fails and the rollout stops |
+
+The master CV route is an exception to the 10 s budget, like tailor-tex's own 60 s: one XeLaTeX build may take more than 10 s on a busy node (about 1 s normally). `RouteBudgetInterceptor` keeps 10 s for every other route; a route gets its own only with `@RequestBudget(ms)`, above the budget of the dependency it waits for, so the dependency's answer comes first.
 
 503s from Postgres are logged with the reason only (never the SQL) and counted in `http_server_database_failures_total{reason}`; `db_pool_connections{state=total|idle|waiting}` shows the pool. Postgres also has a 6 s client reply deadline: a connection whose server never replies is closed and removed from the pool. Readiness (`/health/ready`) requires Postgres; a capability added later registers its own check, degradable ones with `required: false`.
 
@@ -157,10 +174,11 @@ The image follows the [service runtime contract](https://github.com/nick-lukashi
 
 - Image: `ghcr.io/nick-lukashik/<repo-name>`, tags `sha-<7 chars>` and the full SHA, deployed by digest only. The same image goes to stage and then to prod.
 - gitops: `apps/<svc>/prod/kustomization.yaml` includes `components/service` and `components/api`, sets the host, and has one `images:` entry `ghcr.io/nick-lukashik/<svc>` with a `digest`. The deploy PR changes only that digest.
-- Config through `envFrom`: non-secret values (`LOG_LEVEL`, `TRUST_PROXY_HOPS`, `DATABASE_POOL_MAX`, `TAILOR_USERS`, …) in the ConfigMap `<svc>-config`; `ID_JWKS_URL`, `TOKEN_ISSUER` and `TOKEN_AUDIENCE` default to prod (`http://id-api.prod.svc/.well-known/jwks.json`, `https://id.nick-lukashik.com`, `nick-lukashik`), and the pod needs egress to id-api (the `api-client` label); `DATABASE_URL` in the SealedSecret `<svc>-secrets`. `PORT=3000` comes from gitops; `APP_VERSION` from the image. A bad or missing value stops the process at start.
+- Config through `envFrom`: non-secret values (`LOG_LEVEL`, `TRUST_PROXY_HOPS`, `DATABASE_POOL_MAX`, `TAILOR_USERS`, …) in the ConfigMap `<svc>-config`; `ID_JWKS_URL`, `TOKEN_ISSUER` and `TOKEN_AUDIENCE` default to prod (`http://id-api.prod.svc/.well-known/jwks.json`, `https://id.nick-lukashik.com`, `nick-lukashik`), and the pod needs egress to id-api (the `api-client` label); `TAILOR_TEX_URL` defaults to `http://tailor-tex.prod.svc`; `DATABASE_URL` and `TAILOR_TEX_TOKEN` (the `INTERNAL_API_TOKEN` of tailor-tex; without it the master CV answers 503) in the SealedSecret `<svc>-secrets`. `PORT=3000` comes from gitops; `APP_VERSION` from the image. A bad or missing value stops the process at start.
 - Migrations: `components/api` runs `node dist/db/migrate.js` as an Argo CD `Sync`-hook Job in wave 0 with the same image, config and secrets: after `<svc>-secrets` (wave -1), before the Deployment (wave 1), so a failed migration stops the rollout. See "Migrations" for the rules a migration follows.
 - Probes on the `http` port: `/health/live` (the process answers) and `/health/ready` (503 without Postgres). Both return `x-app-version`, which the post-deploy smoke check waits for.
 - Metrics: Prometheus text on port `9464` (`METRICS_PORT`), path `/metrics`, scraped through the ServiceMonitor from `components/api`. Never on the public `http` port.
 - Callers: only Traefik and pods labelled `nick-lukashik.com/api-client: "true"` (NetworkPolicy from `components/api`).
+- Egress: id-api and tailor-tex, both admitting `api-client` pods.
 
 Conventions for agents and people: `AGENTS.md`; library rules: `.claude/rules/`.

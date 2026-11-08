@@ -10,11 +10,13 @@ export const errorStatus = {
     NOT_INVITED: 403,
     NOT_FOUND: 404,
     PAYLOAD_TOO_LARGE: 413,
+    /** Valid input that cannot be built: the profile does not make a CV (TeX failed, too many pages). */
+    UNPROCESSABLE: 422,
     RATE_LIMITED: 429,
     INTERNAL: 500,
     /** A dependency is down or over its time budget (lock, statement, pool wait); safe to retry later. */
     UNAVAILABLE: 503,
-    /** The whole request exceeded its budget; a write may still have been applied. */
+    /** The whole request or a dependency exceeded its budget; a write may still have been applied. */
     TIMEOUT: 504,
 } as const
 export type ErrorCode = keyof typeof errorStatus
