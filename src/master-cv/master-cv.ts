@@ -174,11 +174,13 @@ export function cvLocation({ city, country, timezone }: ProfileDocument['person'
 export function buildMasterCv(profile: ProfileDocument): CvDocument {
     const name = cvName(profile)
     const headline = cvHeadline(profile)
+    const { settings } = profile
+    const phone = settings.cvShowPhone ? profile.person.phone : undefined
     return {
         name,
-        location: cvLocation(profile.person.location),
-        phoneDisplay: profile.person.phone?.display ?? '',
-        phoneDigits: profile.person.phone?.e164 ?? '',
+        location: settings.cvShowLocation ? cvLocation(profile.person.location) : '',
+        phoneDisplay: phone?.display ?? '',
+        phoneDigits: phone?.e164 ?? '',
         headline,
         stack: profile.career.stackLine,
         links: links(profile),

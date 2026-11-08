@@ -544,6 +544,10 @@ export const settingsSchema = z
                 'free',
             ])
             .default('strict'),
+        /** The CV header shows the location and time zone (D-120). */
+        cvShowLocation: z.boolean().default(true),
+        /** The CV header shows the phone (D-120). */
+        cvShowPhone: z.boolean().default(true),
     })
     .meta({
         id: 'ProfileSettings',
