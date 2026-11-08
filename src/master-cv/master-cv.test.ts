@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { type ProfileDocument, profileDocumentSchema } from '../profile/profile.schemas.js'
 import { cvDocumentSchema } from '../tex/cv-document.js'
-import { buildMasterCv, cvDates, masterCvIssues } from './master-cv.js'
+import { buildMasterCv, cvDates, cvLocation, masterCvIssues } from './master-cv.js'
 
 /** The value, or a failed test. */
 function present<T>(value: T | undefined): T {
@@ -467,6 +467,38 @@ describe('masterCvIssues', () => {
                 message: expect.stringMatching(/^CV jobs\.0\.description: /),
             },
         ])
+    })
+})
+
+describe('cvLocation', () => {
+    it('adds the time zone after the city and country', () => {
+        expect(
+            cvLocation({
+                city: 'Example City',
+                country: 'Exampleland',
+                timezone: 'UTC+4',
+            }),
+        ).toBe('Example City, Exampleland (UTC+4)')
+    })
+
+    it('keeps the place alone without a time zone', () => {
+        expect(
+            cvLocation({
+                city: 'Example City',
+                country: 'Exampleland',
+                timezone: '',
+            }),
+        ).toBe('Example City, Exampleland')
+    })
+
+    it('gives the time zone alone without a place', () => {
+        expect(
+            cvLocation({
+                city: '',
+                country: '',
+                timezone: 'UTC+4',
+            }),
+        ).toBe('UTC+4')
     })
 })
 
