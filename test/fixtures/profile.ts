@@ -152,6 +152,7 @@ export const exampleProfile = () => ({
     skills: [
         {
             label: 'Frontend',
+            aiOnly: false,
             items: [
                 {
                     name: 'React',
@@ -188,6 +189,7 @@ export const exampleProfile = () => ({
             id: 'profile',
             full: 'An engineer who ships.',
             compact: 'Ships.',
+            aiOnly: false,
         },
     ],
     story: {

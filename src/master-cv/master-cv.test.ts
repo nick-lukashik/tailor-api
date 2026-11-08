@@ -492,17 +492,20 @@ describe('masterCvIssues', () => {
 })
 
 describe('cvLocation', () => {
-    it('adds the time zone after the city and country', () => {
+    it('joins the place, the time zone and Remote', () => {
         expect(
-            cvLocation({
-                city: 'Example City',
-                country: 'Exampleland',
-                timezone: 'UTC+4',
-            }),
-        ).toBe('Example City, Exampleland (UTC+4)')
+            cvLocation(
+                {
+                    city: 'Example City',
+                    country: 'Exampleland',
+                    timezone: 'UTC+4',
+                },
+                true,
+            ),
+        ).toBe('Example City, Exampleland · UTC+4 · Remote')
     })
 
-    it('keeps the place alone without a time zone', () => {
+    it('keeps the place alone without a time zone or remote work', () => {
         expect(
             cvLocation({
                 city: 'Example City',
@@ -512,14 +515,65 @@ describe('cvLocation', () => {
         ).toBe('Example City, Exampleland')
     })
 
-    it('gives the time zone alone without a place', () => {
+    it('gives the country and time zone without a city', () => {
         expect(
             cvLocation({
                 city: '',
-                country: '',
+                country: 'Exampleland',
                 timezone: 'UTC+4',
             }),
-        ).toBe('UTC+4')
+        ).toBe('Exampleland · UTC+4')
+    })
+})
+
+describe('buildMasterCv AI-only parts', () => {
+    it('leaves out AI-only skill rows and summary paragraphs', () => {
+        const input = profile()
+        input.skills = [
+            {
+                label: 'Backend',
+                aiOnly: false,
+                items: [
+                    {
+                        name: 'Node.js',
+                        aliases: [],
+                        core: false,
+                    },
+                ],
+            },
+            {
+                label: 'AI and LLM',
+                aiOnly: true,
+                items: [
+                    {
+                        name: 'RAG',
+                        aliases: [],
+                        core: false,
+                    },
+                ],
+            },
+        ]
+        input.summary = [
+            {
+                id: 'ai',
+                full: 'Builds LLM products.',
+                compact: '',
+                aiOnly: true,
+            },
+            {
+                id: 'base',
+                full: 'Builds web products.',
+                compact: '',
+                aiOnly: false,
+            },
+        ]
+        const document = buildMasterCv(input)
+        expect(document.skills.map(row => row.label)).toEqual([
+            'Backend',
+        ])
+        expect(document.summary).toEqual([
+            'Builds web products.',
+        ])
     })
 })
 

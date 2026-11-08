@@ -154,16 +154,21 @@ const unique = (values: string[]) => [
     ...new Set(values),
 ]
 
-/** `Tbilisi, Georgia (UTC+4)`: the city and country, then the time zone when there is one. */
-export function cvLocation({ city, country, timezone }: ProfileDocument['person']['location']) {
+/** `Tbilisi, Georgia · UTC+4 · Remote`: the place, the time zone, and Remote when the person works remotely. */
+export function cvLocation({ city, country, timezone }: ProfileDocument['person']['location'], remote = false) {
     const place = [
         city,
         country,
     ]
         .filter(Boolean)
         .join(', ')
-    if (!timezone) return place
-    return place ? `${place} (${timezone})` : timezone
+    return [
+        place,
+        timezone,
+        remote ? 'Remote' : '',
+    ]
+        .filter(Boolean)
+        .join(' · ')
 }
 
 /**
@@ -178,17 +183,21 @@ export function buildMasterCv(profile: ProfileDocument): CvDocument {
     const phone = settings.cvShowPhone ? profile.person.phone : undefined
     return {
         name,
-        location: settings.cvShowLocation ? cvLocation(profile.person.location) : '',
+        location: settings.cvShowLocation
+            ? cvLocation(profile.person.location, profile.applicationFacts.workFormats.includes('remote'))
+            : '',
         phoneDisplay: phone?.display ?? '',
         phoneDigits: phone?.e164 ?? '',
         headline,
         stack: profile.career.stackLine,
         links: links(profile),
         summary: profile.summary
+            .filter(item => !item.aiOnly)
             .map(item => item.full || item.compact)
             .filter(Boolean)
             .slice(0, 2),
         skills: profile.skills
+            .filter(row => !row.aiOnly)
             .map(row => ({
                 label: row.label,
                 items: row.items.map(item => item.name).slice(0, 40),
