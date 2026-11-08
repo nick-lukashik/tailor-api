@@ -44,12 +44,14 @@ export async function startIdentity() {
         audience?: string
         issuer?: string
         signedBy?: 'id-api' | 'stranger'
+        /** The `roles` claim; none unless told otherwise. */
+        roles?: string[]
     }
     /** An access token of `userId`, valid for five minutes unless told otherwise. */
     const token = (userId: string, options: TokenOptions = {}) =>
         new SignJWT({
             sid: crypto.randomUUID(),
-            roles: [],
+            roles: options.roles ?? [],
             av: 0,
         })
             .setProtectedHeader({

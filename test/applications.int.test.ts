@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { OWNER, startApp, type TestApp } from './harness.js'
 
-/** Invited too: a second person with applications of their own. */
+/** With the role too: a second person with applications of their own. */
 const other = '019a5f00-0000-7000-8000-00000000b002'
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
@@ -10,9 +10,7 @@ describe('applications', () => {
     let t: TestApp
 
     beforeAll(async () => {
-        t = await startApp({
-            TAILOR_USERS: `${OWNER},${other}`,
-        })
+        t = await startApp()
     })
     afterAll(async () => {
         await t?.close()

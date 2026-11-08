@@ -11,9 +11,7 @@ describe('profile', () => {
     let t: TestApp
 
     beforeAll(async () => {
-        t = await startApp({
-            TAILOR_USERS: `${OWNER},${SECOND}`,
-        })
+        t = await startApp()
     })
     afterAll(async () => {
         await t?.close()

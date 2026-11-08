@@ -1,18 +1,10 @@
-import { Global, Module } from '@nestjs/common'
-import { InvitedGuard } from './invited.guard.js'
+import { Module } from '@nestjs/common'
 import { MeController } from './me.controller.js'
 
-/** Who may use Tailor: the allowlist guard for every module, and GET /me. */
-@Global()
+/** Who may use Tailor: `@TailorAccess()` (the role check, used by every module) and GET /me. */
 @Module({
     controllers: [
         MeController,
-    ],
-    providers: [
-        InvitedGuard,
-    ],
-    exports: [
-        InvitedGuard,
     ],
 })
 export class AccessModule {}

@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from 
 import { ApiCreatedResponse, ApiHeader, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import type { AccessClaims } from '@nick-lukashik/auth'
 import { Caller } from '@nick-lukashik/auth/nest'
-import { Invited } from '../access/invited.guard.js'
+import { TailorAccess } from '../access/tailor-role.guard.js'
 import { ApiErrors } from '../common/openapi/openapi.js'
 import {
     applicationListSchema,
@@ -22,7 +22,7 @@ import { ApplicationsService } from './applications.service.js'
     description: 'Echoed back; generated when absent',
 })
 @Controller('applications')
-@Invited()
+@TailorAccess()
 export class ApplicationsController {
     constructor(private readonly applications: ApplicationsService) {}
 

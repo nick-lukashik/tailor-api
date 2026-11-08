@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { Logger } from 'nestjs-pino'
 import request from 'supertest'
 import { inject } from 'vitest'
+import { TAILOR_ROLE } from '../src/access/tailor-role.guard.js'
 import { configureApp } from '../src/app.setup.js'
 import { DB } from '../src/common/database/database.js'
 import { Metrics } from '../src/common/metrics/metrics.js'
@@ -11,7 +12,7 @@ import { env } from '../src/config/env.js'
 import type { Db } from '../src/db/types.js'
 import { AUDIENCE, ISSUER, startIdentity } from './identity.js'
 
-/** On TAILOR_USERS by default: the person every test acts as unless it says otherwise. */
+/** The person every test acts as unless it says otherwise. */
 export const OWNER = '019a5f00-0000-7000-8000-00000000a001'
 
 export type TestApp = Awaited<ReturnType<typeof startApp>>
@@ -32,7 +33,6 @@ export async function startApp(overrides: Record<string, string> = {}) {
         ID_JWKS_URL: identity.jwksUrl,
         TOKEN_ISSUER: ISSUER,
         TOKEN_AUDIENCE: AUDIENCE,
-        TAILOR_USERS: OWNER,
         ...overrides,
     })
     env.reset()
@@ -57,9 +57,14 @@ export async function startApp(overrides: Record<string, string> = {}) {
 
     const http = () => request(app.getHttpServer())
     const tokens = new Map<string, string>()
-    const bearer = async (userId: string) => {
-        const cached = tokens.get(userId) ?? (await identity.bearer(userId))
-        tokens.set(userId, cached)
+    const bearer = async (userId: string, roles: string[]) => {
+        const key = `${userId} ${roles.join(',')}`
+        const cached =
+            tokens.get(key)
+            ?? (await identity.bearer(userId, {
+                roles,
+            }))
+        tokens.set(key, cached)
         return cached
     }
 
@@ -68,9 +73,14 @@ export async function startApp(overrides: Record<string, string> = {}) {
         db,
         identity,
         http,
-        /** Requests with the access token of `userId` (the owner by default). */
-        as: async (userId = OWNER) => {
-            const authorization = await bearer(userId)
+        /** Requests with the access token of `userId` (the owner by default), with the `tailor` role unless `roles` says otherwise. */
+        as: async (
+            userId = OWNER,
+            roles = [
+                TAILOR_ROLE,
+            ],
+        ) => {
+            const authorization = await bearer(userId, roles)
             return {
                 get: (path: string) => http().get(path).set('authorization', authorization),
                 post: (path: string) => http().post(path).set('authorization', authorization),

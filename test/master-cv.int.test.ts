@@ -117,13 +117,13 @@ describe('master CV', () => {
         expect(tex.received).toEqual([])
     })
 
-    it('needs a token (401) of an invited person (403)', async () => {
+    it('needs a token (401) with the tailor role (403)', async () => {
         const anonymous = await t.http().get(PATH)
         expect(anonymous.status).toBe(401)
         expect(anonymous.body.code).toBe('UNAUTHORIZED')
-        const stranger = await (await t.as('019a5f00-0000-7000-8000-00000000f006')).get(PATH)
+        const stranger = await (await t.as('019a5f00-0000-7000-8000-00000000f006', [])).get(PATH)
         expect(stranger.status).toBe(403)
-        expect(stranger.body.code).toBe('NOT_INVITED')
+        expect(stranger.body.code).toBe('FORBIDDEN')
         expect(tex.received).toEqual([])
     })
 

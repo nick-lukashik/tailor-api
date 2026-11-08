@@ -5,9 +5,8 @@ export const errorStatus = {
     VALIDATION_FAILED: 400,
     /** No valid access token: refresh and retry, or sign in. */
     UNAUTHORIZED: 401,
+    /** A valid token without what the route needs: the `tailor` role, or a permission. */
     FORBIDDEN: 403,
-    /** A valid token of a person who is not on the allowlist (TAILOR_USERS): Tailor is by invitation. */
-    NOT_INVITED: 403,
     NOT_FOUND: 404,
     PAYLOAD_TOO_LARGE: 413,
     /** Valid input that cannot be built: the profile does not make a CV (TeX failed, too many pages). */
