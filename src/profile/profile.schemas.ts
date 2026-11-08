@@ -295,6 +295,8 @@ export const skillsSchema = list(
     z.strictObject({
         /** `Frontend`, `AI and LLM`. */
         label: z.string().min(1).max(100),
+        /** Only in AI CVs (D-121): the base CV leaves the row out. */
+        aiOnly: z.boolean().default(false),
         items: list(
             z.strictObject({
                 name: z.string().min(1).max(100),
@@ -375,6 +377,8 @@ export const summarySchema = list(
         id: slugSchema,
         full: text(PARAGRAPH),
         compact: text(PARAGRAPH),
+        /** Only in AI CVs (D-121): the base CV leaves the paragraph out. */
+        aiOnly: z.boolean().default(false),
     }),
     20,
 ).meta({
