@@ -12,5 +12,8 @@ import { ProfileService } from './profile.service.js'
         ProfileRepository,
         ProfileService,
     ],
+    exports: [
+        ProfileService,
+    ],
 })
 export class ProfileModule {}

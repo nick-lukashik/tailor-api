@@ -1,15 +1,17 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { StandardSchemaValidationPipe, VersioningType } from '@nestjs/common'
 import type { ConfigType } from '@nestjs/config'
+import { Reflector } from '@nestjs/core'
 import type { NestExpressApplication } from '@nestjs/platform-express'
 import { ErrorFilter } from './common/http/error.filter.js'
 import { requestContext } from './common/http/request-id.js'
-import { REQUEST_TIMEOUT_MS, RequestTimeoutInterceptor } from './common/http/request-timeout.js'
+import { REQUEST_TIMEOUT_MS } from './common/http/request-timeout.js'
 import { validationException } from './common/http/validation.js'
 import { HttpMetrics } from './common/metrics/http-metrics.js'
 import { Metrics } from './common/metrics/metrics.js'
 import { setupOpenApi } from './common/openapi/openapi.js'
 import { appConfig } from './config/config.js'
+import { RouteBudgetInterceptor } from './request-budget.js'
 
 /** Largest request body (JSON or form) the parsers accept; larger is a 413 (service contract). */
 export const BODY_LIMIT = '1mb'
@@ -17,7 +19,7 @@ export const BODY_LIMIT = '1mb'
 /**
  * HTTP setup shared by main.ts and the integration tests: security headers,
  * request id, metrics, body limits, Zod validation, contract errors, the
- * request time budget, `/api/v1` routes, OpenAPI, graceful shutdown. CORS
+ * request time budgets, `/api/v1` routes, OpenAPI, graceful shutdown. CORS
  * stays off: browsers reach the API only through the web app's server.
  */
 export function configureApp(app: NestExpressApplication) {
@@ -66,7 +68,8 @@ export function configureApp(app: NestExpressApplication) {
         name: 'http_server_request_timeouts_total',
         help: 'Requests answered 504 because they exceeded the whole-request budget.',
     })
-    app.useGlobalInterceptors(new RequestTimeoutInterceptor(REQUEST_TIMEOUT_MS, () => timeouts.inc()))
+    // 10 s for every route but those with their own @RequestBudget (the master CV PDF).
+    app.useGlobalInterceptors(new RouteBudgetInterceptor(app.get(Reflector), REQUEST_TIMEOUT_MS, () => timeouts.inc()))
     app.setGlobalPrefix('api', {
         exclude: [
             'health/live',

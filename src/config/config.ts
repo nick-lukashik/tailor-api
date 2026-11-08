@@ -30,3 +30,8 @@ export const authConfig = registerAs('auth', () => ({
 export const accessConfig = registerAs('access', () => ({
     users: env().TAILOR_USERS,
 }))
+
+export const texConfig = registerAs('tex', () => ({
+    url: env().TAILOR_TEX_URL.replace(/\/+$/, ''),
+    token: env().TAILOR_TEX_TOKEN,
+}))

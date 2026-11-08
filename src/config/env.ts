@@ -30,6 +30,15 @@ export const envSchema = baseEnvSchema
         TOKEN_AUDIENCE: z.string().min(1).default('nick-lukashik'),
         /** Who may use Tailor (D-112): user ids of id-api. Anyone else signed in gets 403 NOT_INVITED. */
         TAILOR_USERS: userList,
+        /** tailor-tex, the internal CV renderer (CvDocument JSON → PDF). */
+        TAILOR_TEX_URL: z.url().default('http://tailor-tex.prod.svc'),
+        /** Its INTERNAL_API_TOKEN. Unset: the routes that build a PDF answer 503. */
+        TAILOR_TEX_TOKEN: z
+            .string()
+            .min(32, {
+                error: 'at least 32 characters (the INTERNAL_API_TOKEN of tailor-tex)',
+            })
+            .optional(),
     })
 
 export type Env = z.output<typeof envSchema>

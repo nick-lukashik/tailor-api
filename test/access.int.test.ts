@@ -80,6 +80,7 @@ describe('access: id tokens and the allowlist', () => {
             await as.get('/api/v1/profile'),
             await as.put('/api/v1/profile').send({}),
             await as.get('/api/v1/profile/schema'),
+            await as.get('/api/v1/profile/cv.pdf'),
         ]) {
             expect(res.status).toBe(403)
             expect(res.body).toEqual({
