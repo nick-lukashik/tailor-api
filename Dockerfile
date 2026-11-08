@@ -12,14 +12,16 @@ WORKDIR /app
 # deps: pnpm and the manifests.
 FROM base AS deps
 ENV CI=1
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 # Node 25+ ships without corepack: install the pnpm that package.json "packageManager" names.
 RUN npm install --global "$(node -p 'require("./package.json").packageManager')" \
     && npm cache clean --force
 
-# build: dist/ from src/.
+# build: dist/ from src/. The secret npmrc (build.yml, github-packages) holds the
+# GitHub Packages token for @nick-lukashik/*; it is mounted for the install only.
 FROM deps AS build
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc,required=false \
+    --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile --store-dir /pnpm/store
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
@@ -27,7 +29,8 @@ RUN pnpm build
 
 # prod-deps: node_modules without dev dependencies.
 FROM deps AS prod-deps
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc,required=false \
+    --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile --prod --store-dir /pnpm/store
 
 # runtime: files stay owned by root, so the app cannot change itself. The

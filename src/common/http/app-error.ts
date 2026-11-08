@@ -3,6 +3,11 @@ import { z } from 'zod'
 /** Stable machine-readable error codes of the HTTP contract and their statuses. */
 export const errorStatus = {
     VALIDATION_FAILED: 400,
+    /** No valid access token: refresh and retry, or sign in. */
+    UNAUTHORIZED: 401,
+    FORBIDDEN: 403,
+    /** A valid token of a person who is not on the allowlist (TAILOR_USERS): Tailor is by invitation. */
+    NOT_INVITED: 403,
     NOT_FOUND: 404,
     PAYLOAD_TOO_LARGE: 413,
     RATE_LIMITED: 429,

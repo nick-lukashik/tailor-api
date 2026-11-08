@@ -20,6 +20,8 @@ function parserError(exception: unknown) {
 }
 
 const codeOf = (status: number): ErrorCode => {
+    if (status === HttpStatus.UNAUTHORIZED) return 'UNAUTHORIZED'
+    if (status === HttpStatus.FORBIDDEN) return 'FORBIDDEN'
     if (status === HttpStatus.NOT_FOUND) return 'NOT_FOUND'
     if (status === HttpStatus.PAYLOAD_TOO_LARGE) return 'PAYLOAD_TOO_LARGE'
     return status >= 500 ? 'INTERNAL' : 'VALIDATION_FAILED'
@@ -68,6 +70,14 @@ export function renderError(exception: unknown): Rendered {
             status,
             code: codeOf(status),
             message,
+        }
+    }
+    // E.g. the identity keys are unreachable (AccessTokenGuard): safe to retry.
+    if (status === HttpStatus.SERVICE_UNAVAILABLE) {
+        return {
+            status,
+            code: 'UNAVAILABLE',
+            message: exception instanceof Error && exception.message ? exception.message : 'Service unavailable',
         }
     }
     const failure = databaseFailure(exception)

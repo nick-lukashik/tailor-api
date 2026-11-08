@@ -188,6 +188,9 @@ importers:
       '@nestjs/terminus':
         specifier: 12.1.0
         version: 12.1.0(@grpc/grpc-js@1.14.7)(@grpc/proto-loader@0.8.1)(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.3.2)(@nestjs/swagger@12.0.5(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.3.2)(reflect-metadata@0.2.2)(typescript@7.0.2))(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nick-lukashik/auth':
+        specifier: 0.1.0
+        version: 0.1.0(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.3.2)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@prometheus-io/client':
         specifier: 0.16.1
         version: 0.16.1
@@ -246,6 +249,9 @@ importers:
       drizzle-kit:
         specifier: 0.31.11
         version: 0.31.11
+      jose:
+        specifier: 6.2.14
+        version: 6.2.14
       supertest:
         specifier: 7.3.1
         version: 7.3.1
@@ -851,6 +857,14 @@ packages:
         optional: true
       '@nestjs/platform-express':
         optional: true
+
+  '@nick-lukashik/auth@0.1.0':
+    resolution: {integrity: sha512-eIGzM1tuvovBVtdZUdtrd7/ipV45Cpez1ys8X0u6ro61io0pHfHwuKU9klQhzhKSzFSIaYFDzEH4vL6+LflYjg==, tarball: https://npm.pkg.github.com/download/@nick-lukashik/auth/0.1.0/fbf8604749911586173d4815cfd5d4735224973d}
+    peerDependencies:
+      '@nestjs/common': ^12.0.0
+      '@nestjs/core': ^12.0.0
+      reflect-metadata: ^0.2.0
+      rxjs: ^7.8.0
 
   '@noble/hashes@1.8.0':
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
@@ -1949,6 +1963,9 @@ packages:
 
   jackspeak@3.4.3:
     resolution: {integrity: sha512-OGlZQpz2yfahA/Rd1Y8Cd9SIEsqvXkLVoSw/cgwhnhFMDbsQFeZYoJJ7bIZBS9BcamUW96asq/npPWugM+RQBw==}
+
+  jose@6.2.14:
+    resolution: {integrity: sha512-3JasLuki1NRLQvY4wCoC37KZk4qxoBx2k2aFqLxT84IezqW0bkJKnNtxnZj/Fu1xsQivoc/lytxaRHJoGLjJ1A==}
 
   js-yaml@5.5.0:
     resolution: {integrity: sha512-paNr4LFIFPjeeSmwNYdrb8FafLLG/Cr2Af3GjbsHJ5CxIjH4r0c2emlmRdAtpPAieP1gRVzk6buBbVP5gBMGAg==}
@@ -3136,6 +3153,14 @@ snapshots:
     optionalDependencies:
       '@nestjs/platform-express': 12.3.2(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.3.2)
 
+  '@nick-lukashik/auth@0.1.0(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.3.2)(reflect-metadata@0.2.2)(rxjs@7.8.2)':
+    dependencies:
+      '@nestjs/common': 12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core': 12.3.2(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@12.3.2)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      jose: 6.2.14
+      reflect-metadata: 0.2.2
+      rxjs: 7.8.2
+
   '@noble/hashes@1.8.0': {}
 
   '@opentelemetry/api@1.10.0': {}
@@ -4074,6 +4099,8 @@ snapshots:
       '@isaacs/cliui': 8.0.2
     optionalDependencies:
       '@pkgjs/parseargs': 0.11.0
+
+  jose@6.2.14: {}
 
   js-yaml@5.5.0:
     dependencies:

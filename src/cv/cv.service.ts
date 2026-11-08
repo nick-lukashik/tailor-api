@@ -25,9 +25,9 @@ export class CvService {
 
     constructor(private readonly applications: ApplicationsService) {}
 
-    /** An unknown or malformed id is a 404 (ApplicationsService.get). */
+    /** An unknown or malformed id is a 404 (ApplicationsService.getForCv). */
     async get(applicationId: string): Promise<CvFile> {
-        const application = await this.applications.get(applicationId)
+        const application = await this.applications.getForCv(applicationId)
         return {
             fileName: cvFileName(CV_OWNER, application.role),
             content: this.demo,

@@ -1,0 +1,2 @@
+ALTER TABLE "applications" ADD COLUMN "user_id" uuid;--> statement-breakpoint
+CREATE INDEX "applications_user_id_created_at_id_idx" ON "applications" USING btree ("user_id","created_at" DESC NULLS LAST,"id" DESC NULLS LAST);
