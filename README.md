@@ -2,16 +2,16 @@
 
 The API of Tailor: a vacancy in, a CV and a cover letter for it out, and the application tracked until an offer or a refusal. Its web app is [`tailor-web`](https://github.com/nick-lukashik/tailor-web) on `tailor.<domain>`; this API is internal to it, except the CV files on `cv.<domain>`.
 
-Created from [`nest-starter`](https://github.com/nick-lukashik/nest-starter) (`.template-version`). Now a skeleton: the `applications` module (Postgres, three demo rows from migration `0001_demo_data`) and the `cv` module (the CV of an application by its id; the same demo PDF for all, under each one's own file name). The pipeline, the CV files and sign-in come with the logic.
+Created from [`nest-starter`](https://github.com/nick-lukashik/nest-starter) (`.template-version`). Modules: `access` (id-api access tokens and the allowlist), `applications` (the person's own; three demo rows without a person from migration `0001_demo_data`, listed to nobody), `profile` (the person's profile document, versions and snapshots) and `cv` (the CV of an application by its id; the same demo PDF for all, under each one's own file name). The pipeline and the CV files come with the logic.
 
 Redis, RabbitMQ (events through outbox/inbox) and pg-boss (jobs) are not here. When a feature needs one, copy it from [`nest-example`](https://github.com/nick-lukashik/nest-example) ("Add a capability" below). The shared code in `src/common/` is identical to the starter's, so a fix there is ported from the starter (`.github` `docs/templates.md`).
 
 ## Routes in prod
 
-| Host                                       | Reaches                   | How                                                                                                   |
-| ------------------------------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `cv.<domain>/<application id>/<file name>` | `GET /api/v1/cv/...` only | the gitops IngressRoute rewrites every path to `/api/v1/cv/...`, so nothing else of the API is public |
-| none                                       | everything else           | `tailor-web` calls `http://tailor-api.prod.svc` from its server (`/api` proxy, GET only for now)      |
+| Host                                       | Reaches                   | How                                                                                                    |
+| ------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `cv.<domain>/<application id>/<file name>` | `GET /api/v1/cv/...` only | the gitops IngressRoute rewrites every path to `/api/v1/cv/...`, so nothing else of the API is public  |
+| none                                       | everything else           | `tailor-web` calls `http://tailor-api.prod.svc` from its server (`/api` proxy) with the person's token |
 
 ## What is inside
 
@@ -58,17 +58,31 @@ Swagger UI: `/docs` (except with `NODE_ENV=production`), document: `/openapi.jso
 
 Prefix `/api`, version in the URI. The `x-request-id` header is accepted (if well-formed) or generated, and returned; `x-app-version` is `APP_VERSION`. CORS is off: browsers reach the API only through the web app's server.
 
+Every `/api/v1` route but `/api/v1/cv/*` needs `Authorization: Bearer <access token of id-api>` (ES256, checked against id-api's JWKS with `@nick-lukashik/auth`: `iss`, `aud`, `typ: at+jwt`, expiry): 401 `UNAUTHORIZED` without a valid one, 503 `UNAVAILABLE` when the keys cannot be fetched. Tailor is by invitation (D-112): a person not on `TAILOR_USERS` gets 403 `NOT_INVITED` everywhere except `GET /api/v1/me`. Everything is the caller's own (`sub` of the token): someone else's application is a 404.
+
 | Method and path                                                             | Response                                                                                                      |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/applications?limit=20&cursor=…`                                | `{ items: Application[], nextCursor: string \| null }`, newest first                                          |
+| `GET /api/v1/me`                                                            | `{ userId, invited }` for any valid token: the invitation page shows the id to put on `TAILOR_USERS`          |
+| `GET /api/v1/applications?limit=20&cursor=…`                                | `{ items: Application[], nextCursor: string \| null }`, the caller's, newest first                            |
 | `GET /api/v1/applications/:id`                                              | `Application` or 404                                                                                          |
-| `POST /api/v1/applications` `{ company, role?, vacancyUrl?, vacancyText? }` | 201 `Application` (status `new`)                                                                              |
+| `POST /api/v1/applications` `{ company, role?, vacancyUrl?, vacancyText? }` | 201 `Application` (status `new`), the caller's                                                                |
+| `GET /api/v1/profile`                                                       | `{ version, updatedAt, document }`; 404 before the first save                                                 |
+| `PUT /api/v1/profile` the whole document                                    | `{ version, sha256, updatedAt }`: version + 1 and a snapshot; 400 with every bad path; `{}` is an empty one   |
+| `GET /api/v1/profile/schema`                                                | JSON Schema (draft 2020-12) of the document, for editors                                                      |
 | `GET /api/v1/cv/:id/:fileName`                                              | the CV of application `id` inline, `no-store`, `noindex`; the canonical name is `Nick-Lukashik-<Role>-CV.pdf` |
 | `GET /api/v1/cv/:id`, a wrong name                                          | 302 to the canonical link (relative); 404 for an unknown id. Mock: the demo PDF for every application         |
 | `GET /health/live`, `GET /health/ready`                                     | ready: 503 without Postgres                                                                                   |
 | `GET /openapi.json`, `GET /docs`                                            | OpenAPI from the Zod schemas                                                                                  |
 
-Error body: `{ code, message, details?: { path, message }[], requestId }` with `code` one of `VALIDATION_FAILED` (400), `NOT_FOUND` (404), `PAYLOAD_TOO_LARGE` (413, body over 1 MiB), `RATE_LIMITED` (429), `INTERNAL` (500), `UNAVAILABLE` (503: Postgres over a time budget or down, retry later), `TIMEOUT` (504: the request exceeded 10 s; a write may still have been applied).
+Error body: `{ code, message, details?: { path, message }[], requestId }` with `code` one of `VALIDATION_FAILED` (400), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_INVITED` (403: signed in, not on `TAILOR_USERS`), `NOT_FOUND` (404), `PAYLOAD_TOO_LARGE` (413, body over 1 MiB), `RATE_LIMITED` (429), `INTERNAL` (500), `UNAVAILABLE` (503: Postgres over a time budget or down, retry later), `TIMEOUT` (504: the request exceeded 10 s; a write may still have been applied).
+
+## Profile
+
+The data a CV, the texts and the form answers are built from (notes `tailor/02-cv/profile.md`): one strict JSON document with the sections `person`, `career`, `employments` (with `projects`), `cases` (the achievement bank: variants `full`/`compact`/`minimal`, `keyClaims`, `metricClaims`, `categoryRatings` over FE BE AR RE PF QA SE OW EE CO UX AI), `skills`, `education`, `languages`, `summary`, `story` (with `personal` facts), `applicationFacts`, `answers`, `voice`, `settings`. The Zod schemas in `src/profile/profile.schemas.ts` are the contract; every field has a default, unknown fields are refused, and cross-checks run on the whole document (unique ids, a case's `employmentId` and `projectId`).
+
+- **Stored by section.** `profiles` has one row per user and a jsonb column per section, so a pipeline step reads only its slice (D-93). The document is written whole (D-98): the screen of tailor-web is a JSON editor.
+- **Versions.** Every save bumps `profiles.version` and writes `profile_snapshots { user_id, version, document, sha256 }` in the same transaction; `sha256` is of the canonical JSON (sorted keys). A CV will point at the snapshot it was built from.
+- **Size.** A profile with a few hundred cases fits the 1 MiB body limit.
 
 ## Add a capability
 
@@ -132,7 +146,7 @@ docker run --rm --read-only --tmpfs /tmp --user 10001:10001 --network tailor-api
 
 `.github/workflows/ci.yml` calls the org reusable workflows from `nick-lukashik/.github` by the moving major tag `@v1`, never `@master`:
 
-- job `ci`: `build.yml@v1` with `kind: api` and `services: postgres`. It starts a Postgres service container, exports it as `TEST_DATABASE_URL`, runs `pnpm verify` and builds the image with `APP_VERSION=<full SHA>`; on `master` it pushes the image to GHCR and outputs its digest. A change to docs only (`docs/`, `.claude/`, `*.md` at the root) skips all of it. The required check is `ci / verify`. `publish` is on: this repository is not a template.
+- job `ci`: `build.yml@v1.1.0` (the first with `github-packages`) with `kind: api`, `services: postgres` and `github-packages: true` (`@nick-lukashik/auth` from GitHub Packages; `.npmrc` names the registry, the token is user-level: packages README, "Installing"). It starts a Postgres service container, exports it as `TEST_DATABASE_URL`, runs `pnpm verify` and builds the image with `APP_VERSION=<full SHA>`; on `master` it pushes the image to GHCR and outputs its digest. A change to docs only (`docs/`, `.claude/`, `*.md` at the root) skips all of it. The required check is `ci / verify`. `publish` is on: this repository is not a template.
 - job `deploy`: on `master`, when an image was pushed: `deploy-pr.yml@v1` opens the gitops PR with the new digest. Secrets are passed explicitly, never `secrets: inherit`.
 
 `test/global-setup.ts` uses `TEST_DATABASE_URL` when it is set, else starts Postgres in Testcontainers. Plain `DATABASE_URL` is never used, because the tests truncate tables.
@@ -143,7 +157,7 @@ The image follows the [service runtime contract](https://github.com/nick-lukashi
 
 - Image: `ghcr.io/nick-lukashik/<repo-name>`, tags `sha-<7 chars>` and the full SHA, deployed by digest only. The same image goes to stage and then to prod.
 - gitops: `apps/<svc>/prod/kustomization.yaml` includes `components/service` and `components/api`, sets the host, and has one `images:` entry `ghcr.io/nick-lukashik/<svc>` with a `digest`. The deploy PR changes only that digest.
-- Config through `envFrom`: non-secret values (`LOG_LEVEL`, `TRUST_PROXY_HOPS`, `DATABASE_POOL_MAX`, …) in the ConfigMap `<svc>-config`; `DATABASE_URL` in the SealedSecret `<svc>-secrets`. `PORT=3000` comes from gitops; `APP_VERSION` from the image. A bad or missing value stops the process at start.
+- Config through `envFrom`: non-secret values (`LOG_LEVEL`, `TRUST_PROXY_HOPS`, `DATABASE_POOL_MAX`, `TAILOR_USERS`, …) in the ConfigMap `<svc>-config`; `ID_JWKS_URL`, `TOKEN_ISSUER` and `TOKEN_AUDIENCE` default to prod (`http://id-api.prod.svc/.well-known/jwks.json`, `https://id.nick-lukashik.com`, `nick-lukashik`), and the pod needs egress to id-api (the `api-client` label); `DATABASE_URL` in the SealedSecret `<svc>-secrets`. `PORT=3000` comes from gitops; `APP_VERSION` from the image. A bad or missing value stops the process at start.
 - Migrations: `components/api` runs `node dist/db/migrate.js` as an Argo CD `Sync`-hook Job in wave 0 with the same image, config and secrets: after `<svc>-secrets` (wave -1), before the Deployment (wave 1), so a failed migration stops the rollout. See "Migrations" for the rules a migration follows.
 - Probes on the `http` port: `/health/live` (the process answers) and `/health/ready` (503 without Postgres). Both return `x-app-version`, which the post-deploy smoke check waits for.
 - Metrics: Prometheus text on port `9464` (`METRICS_PORT`), path `/metrics`, scraped through the ServiceMonitor from `components/api`. Never on the public `http` port.

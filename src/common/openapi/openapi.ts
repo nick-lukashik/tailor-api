@@ -4,6 +4,8 @@ import { errorBodySchema } from '../http/app-error.js'
 
 const descriptions: Record<number, string> = {
     400: 'Validation failed (VALIDATION_FAILED)',
+    401: 'No valid access token (UNAUTHORIZED)',
+    403: 'Not on the allowlist of Tailor (NOT_INVITED)',
     404: 'Not found (NOT_FOUND)',
     413: 'Request body over 1 MiB (PAYLOAD_TOO_LARGE)',
     429: 'Rate limited (RATE_LIMITED)',
@@ -13,7 +15,7 @@ const descriptions: Record<number, string> = {
 }
 
 /** Documents the contract error body for the given statuses; 500, 503 and 504 apply to every route. */
-export const ApiErrors = (...statuses: (400 | 404 | 413 | 429)[]) =>
+export const ApiErrors = (...statuses: (400 | 401 | 403 | 404 | 413 | 429)[]) =>
     applyDecorators(
         ...[
             ...statuses,

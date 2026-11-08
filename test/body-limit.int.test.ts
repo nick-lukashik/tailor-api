@@ -27,8 +27,9 @@ describe('request body limit (1 MiB)', () => {
         await t?.close()
     })
 
-    const post = (contentType: string, body: string) =>
-        t.http().post('/api/v1/applications').set('content-type', contentType).send(body)
+    // Signed in: the body limit holds before the token check, validation only after it.
+    const post = async (contentType: string, body: string) =>
+        (await t.as()).post('/api/v1/applications').set('content-type', contentType).send(body)
 
     it('parses a JSON body of exactly 1 MiB (and then validates it)', async () => {
         const res = await post('application/json', applicationOfSize(MiB))

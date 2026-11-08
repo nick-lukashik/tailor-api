@@ -1,0 +1,155 @@
+{
+  "id": "8bd45024-0b57-4999-9b2d-0f9bf472d3ff",
+  "prevId": "ea263d1a-0762-4ba3-b307-c3011c22cb9c",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.applications": {
+      "name": "applications",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "company": {
+          "name": "company",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "vacancy_url": {
+          "name": "vacancy_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vacancy_text": {
+          "name": "vacancy_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'new'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp (3) with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "applications_created_at_id_idx": {
+          "name": "applications_created_at_id_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "applications_user_id_created_at_id_idx": {
+          "name": "applications_user_id_created_at_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "applications_company_length": {
+          "name": "applications_company_length",
+          "value": "char_length(\"applications\".\"company\") between 1 and 200"
+        },
+        "applications_role_length": {
+          "name": "applications_role_length",
+          "value": "char_length(\"applications\".\"role\") <= 200"
+        },
+        "applications_vacancy_url_length": {
+          "name": "applications_vacancy_url_length",
+          "value": "char_length(\"applications\".\"vacancy_url\") <= 2048"
+        },
+        "applications_vacancy_text_length": {
+          "name": "applications_vacancy_text_length",
+          "value": "char_length(\"applications\".\"vacancy_text\") <= 50000"
+        },
+        "applications_status": {
+          "name": "applications_status",
+          "value": "\"applications\".\"status\" in ('new', 'sent', 'interview', 'offer', 'rejected')"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

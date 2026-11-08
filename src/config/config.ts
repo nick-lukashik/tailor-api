@@ -20,3 +20,13 @@ export const dbConfig = registerAs('db', () => ({
     url: env().DATABASE_URL,
     max: env().DATABASE_POOL_MAX,
 }))
+
+export const authConfig = registerAs('auth', () => ({
+    jwksUrl: env().ID_JWKS_URL,
+    issuer: env().TOKEN_ISSUER,
+    audience: env().TOKEN_AUDIENCE,
+}))
+
+export const accessConfig = registerAs('access', () => ({
+    users: env().TAILOR_USERS,
+}))

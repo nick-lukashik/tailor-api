@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { startApp, type TestApp } from './harness.js'
 
@@ -9,7 +10,7 @@ describe('cv files', () => {
 
     beforeAll(async () => {
         t = await startApp()
-        const created = await t.http().post('/api/v1/applications').send({
+        const created = await (await t.as()).post('/api/v1/applications').send({
             company: 'Example Labs',
             role: 'Senior Full-stack Engineer',
         })
@@ -66,5 +67,15 @@ describe('cv files', () => {
             expect(res.status).toBe(404)
             expect(res.body.code).toBe('NOT_FOUND')
         }
+    })
+
+    it('serves the CV of an application without a person (the demo rows), with no token', async () => {
+        const demo = '019a5f00-0000-7000-8000-000000000001'
+        await t.db.execute(
+            sql`insert into applications (id, company, role) values (${demo}, 'Example Labs', 'Senior Full-stack Engineer') on conflict do nothing`,
+        )
+        const res = await pdf(`/api/v1/cv/${demo}/${NAME}`)
+        expect(res.status).toBe(200)
+        expect(res.headers['content-type']).toBe('application/pdf')
     })
 })

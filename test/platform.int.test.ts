@@ -47,6 +47,9 @@ describe('health, OpenAPI, metrics', () => {
             expect.arrayContaining([
                 '/api/v1/applications',
                 '/api/v1/applications/{id}',
+                '/api/v1/me',
+                '/api/v1/profile',
+                '/api/v1/profile/schema',
             ]),
         )
         expect(res.body.components.schemas.Application.required).toEqual([
@@ -64,7 +67,7 @@ describe('health, OpenAPI, metrics', () => {
     })
 
     it('counts requests by route template', async () => {
-        await t.http().get('/api/v1/applications/01a19d24-0000-7000-8000-000000000000')
+        await (await t.as()).get('/api/v1/applications/01a19d24-0000-7000-8000-000000000000')
         const scrape = await t.app.get(Metrics).scrape()
         expect(scrape).toMatch(
             /http_server_requests_total\{method="GET",route="\/api\/v1\/applications\/:id",status_class="4xx"/,

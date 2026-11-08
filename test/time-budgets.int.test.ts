@@ -20,7 +20,7 @@ describe('Postgres time budgets', () => {
     beforeAll(async () => {
         t = await startApp()
         pool = t.app.get<pg.Pool>(PG_POOL)
-        const created = await t.http().post('/api/v1/applications').send({
+        const created = await (await t.as()).post('/api/v1/applications').send({
             company: 'locked',
         })
         applicationId = created.body.id
@@ -50,7 +50,7 @@ describe('Postgres time budgets', () => {
             await migration.query('begin')
             await migration.query('lock table applications in access exclusive mode')
             const started = performance.now()
-            const res = await t.http().get(`/api/v1/applications/${applicationId}`)
+            const res = await (await t.as()).get(`/api/v1/applications/${applicationId}`)
             const elapsed = elapsedSince(started)
             expect(res.status).toBe(503)
             expect(res.body).toEqual({
@@ -69,7 +69,7 @@ describe('Postgres time budgets', () => {
                 reason: 'lock_timeout',
             }),
         ).toBeGreaterThanOrEqual(1)
-        const again = await t.http().get(`/api/v1/applications/${applicationId}`)
+        const again = await (await t.as()).get(`/api/v1/applications/${applicationId}`)
         expect(again.status).toBe(200)
         expect(pool.waitingCount).toBe(0)
     })
@@ -115,7 +115,7 @@ describe('Postgres time budgets', () => {
         )
         try {
             const started = performance.now()
-            const res = await t.http().get(`/api/v1/applications/${applicationId}`)
+            const res = await (await t.as()).get(`/api/v1/applications/${applicationId}`)
             const elapsed = elapsedSince(started)
             expect(res.status).toBe(503)
             expect(res.body.message).toBe('Database is busy, retry later')
@@ -124,7 +124,7 @@ describe('Postgres time budgets', () => {
         } finally {
             for (const client of held) client.release()
         }
-        const again = await t.http().get(`/api/v1/applications/${applicationId}`)
+        const again = await (await t.as()).get(`/api/v1/applications/${applicationId}`)
         expect(again.status).toBe(200)
         expect(pool.totalCount).toBeLessThanOrEqual(max)
     })

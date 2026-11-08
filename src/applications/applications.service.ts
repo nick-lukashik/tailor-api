@@ -34,21 +34,28 @@ export class ApplicationsService {
     ) {}
 
     /** A transaction even for one insert: follow-ups (an outbox event, a job) join it. */
-    async create(input: CreateApplication): Promise<Application> {
-        const row = await this.db.transaction(tx => this.repository.insert(tx, input))
+    async create(userId: string, input: CreateApplication): Promise<Application> {
+        const row = await this.db.transaction(tx => this.repository.insert(tx, userId, input))
         return toApplication(row)
     }
 
-    /** A malformed id cannot exist: 404 like any other missing application. */
-    async get(id: string): Promise<Application> {
+    /** The person's own. A malformed id, or someone else's application, is a 404 like any missing one. */
+    async get(id: string, userId: string): Promise<Application> {
+        const row = uuid.safeParse(id).success ? await this.repository.findOwned(id, userId) : undefined
+        if (!row) throw notFound('Application')
+        return toApplication(row)
+    }
+
+    /** Any application by its id, for the public CV link (an unguessable uuidv7). */
+    async getForCv(id: string): Promise<Application> {
         const row = uuid.safeParse(id).success ? await this.repository.findById(id) : undefined
         if (!row) throw notFound('Application')
         return toApplication(row)
     }
 
-    async list(query: ListApplicationsQuery): Promise<ApplicationList> {
+    async list(userId: string, query: ListApplicationsQuery): Promise<ApplicationList> {
         const after = query.cursor ? cursor.decode(query.cursor) : undefined
-        const rows = await this.repository.page(query.limit, after)
+        const rows = await this.repository.page(userId, query.limit, after)
         const items = rows.slice(0, query.limit).map(toApplication)
         const last = items.at(-1)
         return {

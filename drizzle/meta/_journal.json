@@ -15,6 +15,20 @@
       "when": 1794079570723,
       "tag": "0001_demo_data",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794103184547,
+      "tag": "0002_applications_user_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794103184980,
+      "tag": "0003_profiles",
+      "breakpoints": true
     }
   ]
 }
