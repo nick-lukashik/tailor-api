@@ -266,5 +266,7 @@ export const exampleProfile = () => ({
         font: 'plex',
         cvLocale: 'en',
         factsMode: 'strict',
+        cvShowLocation: true,
+        cvShowPhone: true,
     },
 })

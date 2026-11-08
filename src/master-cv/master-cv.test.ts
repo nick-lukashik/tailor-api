@@ -439,6 +439,29 @@ describe('buildMasterCv', () => {
     })
 })
 
+describe('buildMasterCv header settings', () => {
+    it('leaves out the location when the settings hide it', () => {
+        const input = profile()
+        input.settings.cvShowLocation = false
+        const document = buildMasterCv(input)
+        expect(document.location).toBe('')
+        expect(document.phoneDigits).toBe('+15550100000')
+        expect(masterCvIssues(document)).toEqual([])
+    })
+
+    it('leaves out the phone when the settings hide it', () => {
+        const input = profile()
+        input.settings.cvShowPhone = false
+        const document = buildMasterCv(input)
+        expect(document).toMatchObject({
+            location: 'Example City, Exampleland',
+            phoneDisplay: '',
+            phoneDigits: '',
+        })
+        expect(masterCvIssues(document)).toEqual([])
+    })
+})
+
 describe('masterCvIssues', () => {
     it('is empty for a complete profile', () => {
         expect(masterCvIssues(buildMasterCv(profile()))).toEqual([])
@@ -449,13 +472,11 @@ describe('masterCvIssues', () => {
         const issues = masterCvIssues(document)
         expect(issues.map(issue => issue.path)).toEqual([
             'person.names',
-            'person.phone',
             'career',
             'summary',
             'skills',
             'employments',
         ])
-        expect(issues[1]?.message).toMatch(/^CV phoneDigits: /)
     })
 
     it('reports a value over a template limit at its CV path', () => {

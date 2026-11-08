@@ -36,6 +36,8 @@ describe('profile document', () => {
                 template: 'minimal-violet',
                 cvLocale: 'en',
                 factsMode: 'strict',
+                cvShowLocation: true,
+                cvShowPhone: true,
             },
         })
     })

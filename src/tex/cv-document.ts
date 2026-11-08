@@ -12,8 +12,9 @@ export const cvDocumentSchema = z
         name: z.string().min(1).max(120),
         location: z.string().max(120),
         phoneDisplay: z.string().max(40),
-        phoneDigits: z.string().regex(/^\+?\d{6,20}$/, {
-            error: 'digits only, optional leading +, 6 to 20 digits',
+        /** Empty together with `phoneDisplay` when the CV shows no phone. */
+        phoneDigits: z.string().regex(/^(\+?\d{6,20})?$/, {
+            error: 'empty, or digits only, optional leading +, 6 to 20 digits',
         }),
         headline: z.string().min(1).max(120),
         stack: z.string().max(160),
