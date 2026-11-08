@@ -5,7 +5,7 @@ import { errorBodySchema } from '../http/app-error.js'
 const descriptions: Record<number, string> = {
     400: 'Validation failed (VALIDATION_FAILED)',
     401: 'No valid access token (UNAUTHORIZED)',
-    403: 'Not on the allowlist of Tailor (NOT_INVITED)',
+    403: 'The token lacks the tailor role (FORBIDDEN)',
     404: 'Not found (NOT_FOUND)',
     413: 'Request body over 1 MiB (PAYLOAD_TOO_LARGE)',
     422: 'The profile does not make a CV: what is missing, a TeX error or too many pages (UNPROCESSABLE)',

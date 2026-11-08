@@ -2,7 +2,7 @@ import { Body, Controller, Get, Put } from '@nestjs/common'
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import type { AccessClaims } from '@nick-lukashik/auth'
 import { Caller } from '@nick-lukashik/auth/nest'
-import { Invited } from '../access/invited.guard.js'
+import { TailorAccess } from '../access/tailor-role.guard.js'
 import { ApiErrors } from '../common/openapi/openapi.js'
 import {
     type ProfileDocument,
@@ -16,7 +16,7 @@ import { ProfileService } from './profile.service.js'
 /** The caller's profile, read and written whole (D-98). */
 @ApiTags('profile')
 @Controller('profile')
-@Invited()
+@TailorAccess()
 export class ProfileController {
     private readonly jsonSchema = profileJsonSchema()
 

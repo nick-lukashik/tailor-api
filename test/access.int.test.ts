@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { TAILOR_ROLE } from '../src/access/tailor-role.guard.js'
+import { applications } from '../src/db/schema.js'
 import { OWNER, startApp, type TestApp } from './harness.js'
 
 const STRANGER = '019a5f00-0000-7000-8000-00000000c003'
-const UPPERCASE_INVITED = '019A5F00-0000-7000-8000-00000000D004'
 
-describe('access: id tokens and the allowlist', () => {
+describe('access: id tokens and the tailor role', () => {
     let t: TestApp
     /** Every route of the API under /api/v1 but the public CV files, from the OpenAPI document. */
     let routes: {
@@ -13,9 +14,7 @@ describe('access: id tokens and the allowlist', () => {
     }[]
 
     beforeAll(async () => {
-        t = await startApp({
-            TAILOR_USERS: ` ${OWNER}, ,${UPPERCASE_INVITED} `,
-        })
+        t = await startApp()
         const { body } = await t.http().get('/openapi.json')
         routes = Object.entries(body.paths as Record<string, Record<string, unknown>>).flatMap(([path, methods]) =>
             Object.keys(methods).map(method => ({
@@ -70,44 +69,66 @@ describe('access: id tokens and the allowlist', () => {
         expect(scheme.status).toBe(401)
     })
 
-    it('answers 403 NOT_INVITED to a valid token of someone not on TAILOR_USERS', async () => {
-        const as = await t.as(STRANGER)
-        for (const res of [
-            await as.get('/api/v1/applications'),
-            await as.post('/api/v1/applications').send({
-                company: 'Nope',
-            }),
-            await as.get('/api/v1/profile'),
-            await as.put('/api/v1/profile').send({}),
-            await as.get('/api/v1/profile/schema'),
-            await as.get('/api/v1/profile/cv.pdf'),
+    it('answers 403 FORBIDDEN to a valid token without the tailor role', async () => {
+        for (const roles of [
+            [],
+            [
+                'owner',
+                'support',
+            ],
+            [
+                'Tailor',
+                'tailors',
+            ],
         ]) {
-            expect(res.status).toBe(403)
-            expect(res.body).toEqual({
-                code: 'NOT_INVITED',
-                message: 'Tailor is by invitation',
-                requestId: res.headers['x-request-id'],
-            })
+            const as = await t.as(STRANGER, roles)
+            for (const res of [
+                await as.get('/api/v1/applications'),
+                await as.post('/api/v1/applications').send({
+                    company: 'Nope',
+                }),
+                await as.get('/api/v1/profile'),
+                await as.put('/api/v1/profile').send({}),
+                await as.get('/api/v1/profile/schema'),
+                await as.get('/api/v1/profile/cv.pdf'),
+            ]) {
+                expect(res.status, roles.join(',')).toBe(403)
+                expect(res.body).toEqual({
+                    code: 'FORBIDDEN',
+                    message: 'Forbidden',
+                    requestId: res.headers['x-request-id'],
+                })
+            }
         }
+        expect(await t.db.$count(applications)).toBe(0)
     })
 
-    it('lets the invited in, whatever the case of the id in the list', async () => {
+    it('lets in anyone whose token carries the role, among others', async () => {
         expect((await (await t.as()).get('/api/v1/applications')).status).toBe(200)
-        expect((await (await t.as(UPPERCASE_INVITED.toLowerCase())).get('/api/v1/applications')).status).toBe(200)
+        expect(
+            (
+                await (
+                    await t.as(STRANGER, [
+                        'support',
+                        TAILOR_ROLE,
+                    ])
+                ).get('/api/v1/applications')
+            ).status,
+        ).toBe(200)
     })
 
-    it('/me tells anyone signed in their id and whether they are invited', async () => {
+    it('/me tells anyone signed in their id and whether Tailor is open to them', async () => {
         const owner = await (await t.as()).get('/api/v1/me')
         expect(owner.status).toBe(200)
         expect(owner.body).toEqual({
             userId: OWNER,
-            invited: true,
+            allowed: true,
         })
-        const stranger = await (await t.as(STRANGER)).get('/api/v1/me')
+        const stranger = await (await t.as(STRANGER, [])).get('/api/v1/me')
         expect(stranger.status).toBe(200)
         expect(stranger.body).toEqual({
             userId: STRANGER,
-            invited: false,
+            allowed: false,
         })
     })
 

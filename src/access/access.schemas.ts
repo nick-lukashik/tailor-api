@@ -2,9 +2,10 @@ import { z } from 'zod'
 
 export const meSchema = z
     .object({
-        /** `sub` of the access token: the id to put on TAILOR_USERS. */
+        /** `sub` of the access token. */
         userId: z.uuid(),
-        invited: z.boolean(),
+        /** Whether the token carries the `tailor` role. */
+        allowed: z.boolean(),
     })
     .meta({
         id: 'Me',

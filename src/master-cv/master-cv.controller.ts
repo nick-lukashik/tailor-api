@@ -5,7 +5,7 @@ import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import type { AccessClaims } from '@nick-lukashik/auth'
 import { Caller } from '@nick-lukashik/auth/nest'
 import type { Response } from 'express'
-import { Invited } from '../access/invited.guard.js'
+import { TailorAccess } from '../access/tailor-role.guard.js'
 import { ApiErrors } from '../common/openapi/openapi.js'
 import { RequestBudget } from '../request-budget.js'
 import { TEX_RENDER_TIMEOUT_MS } from '../tex/tailor-tex.client.js'
@@ -16,7 +16,7 @@ export const MASTER_CV_REQUEST_BUDGET_MS = TEX_RENDER_TIMEOUT_MS + 5_000
 
 @ApiTags('profile')
 @Controller('profile')
-@Invited()
+@TailorAccess()
 export class MasterCvController {
     constructor(private readonly masterCv: MasterCvService) {}
 
