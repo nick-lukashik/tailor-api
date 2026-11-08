@@ -154,6 +154,18 @@ const unique = (values: string[]) => [
     ...new Set(values),
 ]
 
+/** `Tbilisi, Georgia (UTC+4)`: the city and country, then the time zone when there is one. */
+export function cvLocation({ city, country, timezone }: ProfileDocument['person']['location']) {
+    const place = [
+        city,
+        country,
+    ]
+        .filter(Boolean)
+        .join(', ')
+    if (!timezone) return place
+    return place ? `${place} (${timezone})` : timezone
+}
+
 /**
  * The master CV document for tailor-tex. Pure and deterministic; texts are
  * the profile's own, as written. Counts are cut to the template's limits;
@@ -162,15 +174,9 @@ const unique = (values: string[]) => [
 export function buildMasterCv(profile: ProfileDocument): CvDocument {
     const name = cvName(profile)
     const headline = cvHeadline(profile)
-    const { city, country } = profile.person.location
     return {
         name,
-        location: [
-            city,
-            country,
-        ]
-            .filter(Boolean)
-            .join(', '),
+        location: cvLocation(profile.person.location),
         phoneDisplay: profile.person.phone?.display ?? '',
         phoneDigits: profile.person.phone?.e164 ?? '',
         headline,
