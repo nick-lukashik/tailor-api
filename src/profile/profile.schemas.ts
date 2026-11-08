@@ -15,7 +15,7 @@ const LONG = 20_000
 const text = (max: number) => z.string().max(max).default('')
 const list = <T extends z.ZodType>(item: T, max: number) => z.array(item).max(max).default([])
 
-/** An id a person types and other fields refer to: `printify`, `c12`, `ai_tools`. */
+/** An id a person types and other fields refer to: `acme`, `c12`, `ai_tools`. */
 export const slugSchema = z
     .string()
     .min(1)
