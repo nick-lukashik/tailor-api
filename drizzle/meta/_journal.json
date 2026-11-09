@@ -29,6 +29,13 @@
       "when": 1794103184980,
       "tag": "0003_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794192193181,
+      "tag": "0004_vacancies",
+      "breakpoints": true
     }
   ]
 }

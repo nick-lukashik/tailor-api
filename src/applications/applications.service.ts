@@ -3,8 +3,8 @@ import { z } from 'zod'
 import { DB } from '../common/database/database.js'
 import { notFound } from '../common/http/app-error.js'
 import { cursorCodec } from '../common/http/cursor.js'
-import type { ApplicationRow, Db } from '../db/types.js'
-import { ApplicationsRepository } from './applications.repository.js'
+import type { Db } from '../db/types.js'
+import { ApplicationsRepository, type ApplicationView } from './applications.repository.js'
 import {
     type Application,
     type ApplicationList,
@@ -16,13 +16,15 @@ import {
 const cursor = cursorCodec(applicationsCursorSchema)
 const uuid = z.uuid()
 
-const toApplication = (row: ApplicationRow): Application => ({
+const toApplication = (row: ApplicationView): Application => ({
     id: row.id,
     company: row.company,
     role: row.role,
     vacancyUrl: row.vacancyUrl,
     vacancyText: row.vacancyText,
     status: row.status,
+    vacancyId: row.vacancyId,
+    parseStatus: row.parseStatus,
     createdAt: row.createdAt.toISOString(),
 })
 

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-The API of Tailor (Work Finder), created from `nest-starter`: HTTP, config, logs, health, metrics and PostgreSQL (Drizzle). Modules: `access` (id-api access tokens through `@nick-lukashik/auth`, the `tailor` role check, `GET /me`), `applications` (vacancies and what was sent to them, per user), `profile` (the person's profile document: sections in jsonb columns, versions, snapshots), `master-cv` (the profile as a PDF through tailor-tex, no vacancy) and `cv` (the CV of an application on `cv.<domain>/<application id>/<file name>`, a demo PDF for now). Redis, RabbitMQ (events through outbox/inbox) and pg-boss (jobs) are added only when the service uses them, copied from `nest-example` ("Add a capability" in `README.md`). The human-facing description is `README.md`.
+The API of Tailor (Work Finder), created from `nest-starter`: HTTP, config, logs, health, metrics and PostgreSQL (Drizzle). Modules: `access` (id-api access tokens through `@nick-lukashik/auth`, the `tailor` role check, `GET /me`), `applications` (the person's pool: vacancies and what was sent to them, per user), `vacancies` (shared vacancy rows found by a normalized link, and the intake of pasted links and texts into the pool), `profile` (the person's profile document: sections in jsonb columns, versions, snapshots), `master-cv` (the profile as a PDF through tailor-tex, no vacancy) and `cv` (the CV of an application on `cv.<domain>/<application id>/<file name>`, a demo PDF for now). Redis, RabbitMQ (events through outbox/inbox) and pg-boss (jobs) are added only when the service uses them, copied from `nest-example` ("Add a capability" in `README.md`). The human-facing description is `README.md`.
 
 ## Commands
 
@@ -23,7 +23,8 @@ The API of Tailor (Work Finder), created from `nest-starter`: HTTP, config, logs
 - `src/tex/`: the tailor-tex client (`POST /api/v1/cv/render`, 60 s, errors mapped to 422/503/504) and `cv-document.ts`, a copy of tailor-tex's `CvDocument` schema: change both together.
 - `src/master-cv/`: `buildMasterCv` (pure: profile → `CvDocument`, unit-tested) and `GET /api/v1/profile/cv.pdf`.
 - `src/request-budget.ts`: `@RequestBudget(ms)`, a route's own request budget; every other route keeps 10 s.
-- `src/applications/`: applications, schemas → repository → service → controller. `src/cv/`: the CV of an application, `cv.<domain>/<application id>/<file name>`; the only routes reachable from the internet (`cv.<domain>`, rewritten to `/api/v1/cv/...` in gitops).
+- `src/vacancies/`: `vacancies` (one shared row per vacancy, `url_key` from `vacancyUrlKey`, pure and unit-tested; `parse_status` starts `pending`) and `POST /api/v1/vacancies/intake` (1–200 links and/or texts, one transaction: find or create the vacancy, then the caller's application for it).
+- `src/applications/`: applications, schemas → repository → service → controller; list and get join `vacancyId` and `parseStatus` from `vacancies`. `src/cv/`: the CV of an application, `cv.<domain>/<application id>/<file name>`; the only routes reachable from the internet (`cv.<domain>`, rewritten to `/api/v1/cv/...` in gitops).
 - `drizzle/`: SQL migrations and `meta/` (generated, never edited by hand).
 - `test/`: integration tests and the harness; unit tests sit next to the code (`*.test.ts`).
 - `Dockerfile`, `.github/workflows/ci.yml`: the image and CI follow the [service runtime contract](https://github.com/nick-lukashik/.github/blob/master/docs/service-contract.md) (kind **api**); see "Deploy" in `README.md`.

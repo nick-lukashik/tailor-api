@@ -36,6 +36,8 @@ describe('applications', () => {
             vacancyUrl: null,
             vacancyText: 'hello',
             status: 'new',
+            vacancyId: null,
+            parseStatus: null,
             createdAt: expect.any(String),
         })
         expect(new Date(res.body.createdAt).toISOString()).toBe(res.body.createdAt)
