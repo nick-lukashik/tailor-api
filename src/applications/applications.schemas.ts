@@ -1,6 +1,13 @@
 import { z } from 'zod'
-import { applicationStatuses, cvStatuses, materialsStatuses, vacancyParseStatuses } from '../db/schema.js'
+import {
+    applicationStatuses,
+    cvStatuses,
+    materialsStatuses,
+    vacancyFetchStatuses,
+    vacancyParseStatuses,
+} from '../db/schema.js'
 import { applicationMaterialsSchema } from '../materials/materials.schemas.js'
+import { applyFormSchema } from '../vacancies/apply-form.js'
 import { parsedVacancySchema } from '../vacancies/parse.schemas.js'
 
 /** The API contract of `applications`; OpenAPI is generated from these schemas. */
@@ -50,6 +57,12 @@ export const applicationVacancySchema = z
                 id: 'ParsedVacancy',
             })
             .nullable(),
+        /** The questions of the apply form read from the link; null before or without one. */
+        applyForm: applyFormSchema.nullable(),
+        /** Reading the link: `skipped` without one. */
+        fetchStatus: z.enum(vacancyFetchStatuses),
+        /** A short code when it failed: `http_404`, `timeout`, `no_content`, … */
+        fetchError: z.string().nullable(),
     })
     .meta({
         id: 'ApplicationVacancy',

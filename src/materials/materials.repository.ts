@@ -8,7 +8,7 @@ import type { CvRow, Db, MaterialsRow, Tx, VacancyRow } from '../db/types.js'
 export type MaterialsForGeneration = {
     materials: MaterialsRow
     userId: string | null
-    vacancy: Pick<VacancyRow, 'parseStatus' | 'parsed' | 'rawText'> | null
+    vacancy: Pick<VacancyRow, 'parseStatus' | 'parsed' | 'rawText' | 'applyForm'> | null
     cv: Pick<CvRow, 'status' | 'document' | 'fileName'>
 }
 
@@ -90,6 +90,7 @@ export class MaterialsRepository {
                 parseStatus: vacancies.parseStatus,
                 parsed: vacancies.parsed,
                 rawText: vacancies.rawText,
+                applyForm: vacancies.applyForm,
                 cvStatus: cvs.status,
                 document: cvs.document,
                 fileName: cvs.fileName,
@@ -110,6 +111,7 @@ export class MaterialsRepository {
                           parseStatus: row.parseStatus,
                           parsed: row.parsed,
                           rawText: row.rawText,
+                          applyForm: row.applyForm,
                       }
                     : null,
             cv: {

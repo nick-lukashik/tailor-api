@@ -99,6 +99,16 @@ export const envSchema = baseEnvSchema
         R2_PREFIX: objectPrefix,
         /** Where the CV links point: `<CV_PUBLIC_URL>/<application id>/<file name>`. */
         CV_PUBLIC_URL: z.url().default('https://cv.nick-lukashik.com'),
+        /** Reading vacancy links (`vacancy.fetch`); off, a link is only parsed from the text given with it. */
+        VACANCY_FETCH_ENABLED: z.stringbool().default(true),
+        /** Tests only: the fetch may reach private addresses (the stand-ins on 127.0.0.1). Refused in production. */
+        VACANCY_FETCH_ALLOW_PRIVATE: z.stringbool().default(false),
+        /** The public APIs of the ATSs the fetch reads; set only to point tests at stand-ins. */
+        VACANCY_FETCH_GREENHOUSE_URL: z.url().default('https://boards-api.greenhouse.io'),
+        VACANCY_FETCH_LEVER_API_URL: z.url().default('https://api.lever.co'),
+        VACANCY_FETCH_LEVER_JOBS_URL: z.url().default('https://jobs.lever.co'),
+        VACANCY_FETCH_ASHBY_URL: z.url().default('https://api.ashbyhq.com'),
+        VACANCY_FETCH_WORKABLE_URL: z.url().default('https://apply.workable.com'),
     })
     .refine(
         value =>
@@ -119,6 +129,12 @@ export const envSchema = baseEnvSchema
             ],
         },
     )
+    .refine(value => !(value.VACANCY_FETCH_ALLOW_PRIVATE && value.NODE_ENV === 'production'), {
+        error: 'VACANCY_FETCH_ALLOW_PRIVATE is for tests only, never in production',
+        path: [
+            'VACANCY_FETCH_ALLOW_PRIVATE',
+        ],
+    })
 
 export type Env = z.output<typeof envSchema>
 

@@ -278,6 +278,9 @@ describe('applications', () => {
             updatedAt: vacancy.updatedAt.toISOString(),
             model: 'claude-sonnet-5-5',
             parsed,
+            applyForm: null,
+            fetchStatus: 'skipped',
+            fetchError: null,
         })
 
         // The list stays light: no vacancy or CV in its items.
@@ -305,6 +308,9 @@ describe('applications', () => {
             updatedAt: vacancy.updatedAt.toISOString(),
             model: null,
             parsed: null,
+            applyForm: null,
+            fetchStatus: 'skipped',
+            fetchError: null,
         })
         expect(res.body.cv).toEqual({
             status: 'none',

@@ -201,7 +201,7 @@ export class VacancyParseJob implements OnModuleInit, OnApplicationBootstrap {
         const vacancy = await this.repository.findById(vacancyId)
         if (!vacancy) return 'skipped'
         if (vacancy.rawText === '') {
-            // A later stage fetches the page by `vacancy.url` here before giving up.
+            // The fetch (`vacancy.fetch`) ran first and found no text either.
             await this.repository.markFailed(vacancyId, 'no_text')
             this.logFailure(job, vacancyId, 'no_text')
             return 'failed'

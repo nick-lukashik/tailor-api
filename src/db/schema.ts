@@ -13,6 +13,7 @@ import {
     uuid,
 } from 'drizzle-orm/pg-core'
 import type { ProfileDocument } from '../profile/profile.schemas.js'
+import type { ApplyForm } from '../vacancies/apply-form.js'
 
 /** Millisecond precision, so an ISO string from JSON round-trips exactly (cursors). */
 const at = (name: string) =>
@@ -35,6 +36,14 @@ export const vacancyParseStatuses = [
     'pending',
     'parsed',
     'failed',
+] as const
+
+/** Where reading the vacancy's link is: `skipped` without a link (and for the rows before the fetch). */
+export const vacancyFetchStatuses = [
+    'pending',
+    'fetched',
+    'failed',
+    'skipped',
 ] as const
 
 /**
@@ -60,6 +69,15 @@ export const vacancies = pgTable(
             .default('pending'),
         parsed: jsonb('parsed').$type<unknown>(),
         parseError: text('parse_error'),
+        /** The apply form read from the link (`vacancy.fetch`); null before or without one. */
+        applyForm: jsonb('apply_form').$type<ApplyForm>(),
+        fetchStatus: text('fetch_status', {
+            enum: vacancyFetchStatuses,
+        })
+            .notNull()
+            .default('skipped'),
+        /** A short code when the fetch failed: `http_404`, `timeout`, `blocked_address`, … */
+        fetchError: text('fetch_error'),
         /** The person (`sub`) who added it first. */
         createdBy: uuid('created_by').notNull(),
         createdAt: at('created_at').notNull().defaultNow(),
@@ -74,6 +92,8 @@ export const vacancies = pgTable(
         check('vacancies_company_length', sql`char_length(${t.company}) <= 200`),
         check('vacancies_parse_status', sql`${t.parseStatus} in ('pending', 'parsed', 'failed')`),
         check('vacancies_parse_error_length', sql`char_length(${t.parseError}) <= 2000`),
+        check('vacancies_fetch_status', sql`${t.fetchStatus} in ('pending', 'fetched', 'failed', 'skipped')`),
+        check('vacancies_fetch_error_length', sql`char_length(${t.fetchError}) <= 100`),
     ],
 )
 

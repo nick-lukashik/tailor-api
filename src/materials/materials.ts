@@ -1,4 +1,5 @@
 import type { ParsedVacancy } from '../vacancies/parse.schemas.js'
+import type { FormAnswer } from './form-answers.js'
 import type { MaterialsAnswer, MaterialsContent, MaterialsLanguage } from './materials.schemas.js'
 
 /** Where the model puts the CV link; the code writes the real one in. */
@@ -72,6 +73,8 @@ export function finishMaterials(
     context: {
         cvUrl: string
         language: MaterialsLanguage
+        /** The answers to the apply form, already finished (`formAnswers`). */
+        answers?: FormAnswer[]
     },
 ): MaterialsContent {
     const { cvUrl } = context
@@ -86,5 +89,6 @@ export function finishMaterials(
             .map(point => withLink(plain(point).replace(/^[-•*]\s*/, ''), cvUrl))
             .filter(Boolean)
             .slice(0, WHY_ME_COUNT),
+        answers: context.answers ?? [],
     }
 }

@@ -14,6 +14,13 @@ export const materialsAnswerSchema = z.strictObject({
     telegramMessage: z.string(),
     linkedinNote: z.string(),
     whyMe: z.array(z.string()),
+    /** One per question of the apply form given to the model; empty without one. */
+    answers: z.array(
+        z.strictObject({
+            key: z.string(),
+            answer: z.string(),
+        }),
+    ),
 })
 export type MaterialsAnswer = z.infer<typeof materialsAnswerSchema>
 
@@ -39,6 +46,20 @@ export const materialsContentSchema = z
         linkedinNote: z.string(),
         /** Three short points matching the vacancy's top requirements. */
         whyMe: z.array(z.string()),
+        /**
+         * An answer to every question of the vacancy's apply form but the file
+         * ones, in its order: the standard ones from the profile, the rest by
+         * the model; empty when the facts do not answer it. Empty without a form.
+         */
+        answers: z
+            .array(
+                z.object({
+                    key: z.string(),
+                    label: z.string(),
+                    answer: z.string(),
+                }),
+            )
+            .default([]),
     })
     .meta({
         id: 'MaterialsContent',

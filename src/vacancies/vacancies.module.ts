@@ -4,12 +4,15 @@ import { LlmModule } from '../llm/llm.module.js'
 import { VacanciesController } from './vacancies.controller.js'
 import { VacanciesRepository } from './vacancies.repository.js'
 import { VacanciesService } from './vacancies.service.js'
+import { VacancyFetchJob } from './vacancy-fetch.job.js'
+import { VacancyFetcher } from './vacancy-fetcher.js'
 import { VacancyParseJob } from './vacancy-parse.job.js'
 
 /**
  * Vacancies: one shared row per vacancy (found again by its normalized link),
- * the intake that puts pasted ones into the caller's pool of applications, and
- * the `vacancy.parse` job that reads each one with a model.
+ * the intake that puts pasted ones into the caller's pool of applications, the
+ * `vacancy.fetch` job that reads each link (text and apply form) and the
+ * `vacancy.parse` job that reads each one with a model.
  */
 @Module({
     imports: [
@@ -22,6 +25,8 @@ import { VacancyParseJob } from './vacancy-parse.job.js'
     providers: [
         VacanciesRepository,
         VacanciesService,
+        VacancyFetcher,
+        VacancyFetchJob,
         VacancyParseJob,
     ],
 })

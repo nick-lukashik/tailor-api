@@ -6,6 +6,7 @@ import { TailorAccess } from '../access/tailor-role.guard.js'
 import { ApiErrors } from '../common/openapi/openapi.js'
 import {
     type VacancyIntake,
+    vacancyFetchQueuedSchema,
     vacancyIntakeResultSchema,
     vacancyIntakeSchema,
     vacancyParseQueuedSchema,
@@ -28,7 +29,7 @@ export class VacanciesController {
     @HttpCode(HttpStatus.OK)
     @ApiOperation({
         summary:
-            "Links and texts of vacancies (1–200) into the caller's pool; each new text is parsed in the background",
+            "Links and texts of vacancies (1–200) into the caller's pool; each new link is read and each vacancy parsed in the background",
     })
     @ApiOkResponse({
         standardSchema: vacancyIntakeResultSchema,
@@ -55,5 +56,19 @@ export class VacanciesController {
     @ApiErrors(401, 403, 404)
     reparse(@Caller() caller: AccessClaims, @Param('id') id: string) {
         return this.vacancies.reparse(caller.userId, id)
+    }
+
+    @Post(':id/fetch')
+    @HttpCode(HttpStatus.ACCEPTED)
+    @ApiOperation({
+        summary:
+            "Reads the link of a vacancy of the caller's pool again (its text when none was pasted, and the apply form), in the background",
+    })
+    @ApiAcceptedResponse({
+        standardSchema: vacancyFetchQueuedSchema,
+    })
+    @ApiErrors(401, 403, 404, 409)
+    refetch(@Caller() caller: AccessClaims, @Param('id') id: string) {
+        return this.vacancies.refetch(caller.userId, id)
     }
 }

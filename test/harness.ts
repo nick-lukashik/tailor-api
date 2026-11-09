@@ -14,6 +14,7 @@ import { env } from '../src/config/env.js'
 import { CvGenerateJob } from '../src/cv-generation/cv-generate.job.js'
 import type { Db } from '../src/db/types.js'
 import { MaterialsGenerateJob } from '../src/materials/materials-generate.job.js'
+import { VacancyFetchJob } from '../src/vacancies/vacancy-fetch.job.js'
 import { VacancyParseJob } from '../src/vacancies/vacancy-parse.job.js'
 import { TEST_BUCKET } from './containers.js'
 import { AUDIENCE, ISSUER, startIdentity } from './identity.js'
@@ -49,6 +50,8 @@ export async function startApp(overrides: Record<string, string | undefined> = {
         R2_ACCESS_KEY_ID: 'test-access-key',
         R2_SECRET_ACCESS_KEY: 'test-secret-key',
         R2_BUCKET: TEST_BUCKET,
+        // No real network: a test that reads links turns it on with stand-ins for the sites (`sites.ts`).
+        VACANCY_FETCH_ENABLED: 'false',
     })
     for (const [name, value] of Object.entries(overrides)) {
         if (value === undefined) delete process.env[name]
@@ -72,6 +75,7 @@ export async function startApp(overrides: Record<string, string | undefined> = {
     const db = app.get<Db>(DB)
     const boss = app.get<PgBoss>(PG_BOSS)
     for (const queue of [
+        ...app.get(VacancyFetchJob).queues,
         ...app.get(VacancyParseJob).queues,
         ...app.get(CvGenerateJob).queues,
         ...app.get(MaterialsGenerateJob).queues,
