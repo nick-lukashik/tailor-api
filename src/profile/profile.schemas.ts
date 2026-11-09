@@ -554,11 +554,13 @@ export const settingsSchema = z
         cvShowPhone: z.boolean().default(true),
         /**
          * The person's own instructions appended to the prompts, so generation
-         * can be tuned without a release. `cv`: the CV prompts (analysis and composition).
+         * can be tuned without a release. `cv`: the CV prompts (analysis and composition);
+         * `letters`: the materials (cover letter, e-mail, messages).
          */
         promptAdditions: z
             .strictObject({
                 cv: text(4_000),
+                letters: text(4_000),
             })
             .prefault({}),
     })

@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { applicationStatuses, cvStatuses, vacancyParseStatuses } from '../db/schema.js'
+import { applicationStatuses, cvStatuses, materialsStatuses, vacancyParseStatuses } from '../db/schema.js'
+import { applicationMaterialsSchema } from '../materials/materials.schemas.js'
 import { parsedVacancySchema } from '../vacancies/parse.schemas.js'
 
 /** The API contract of `applications`; OpenAPI is generated from these schemas. */
@@ -19,6 +20,11 @@ export const applicationSchema = z
         cvStatus: z.enum([
             'none',
             ...cvStatuses,
+        ]),
+        /** The status of its newest materials version; `none` before the first. */
+        materialsStatus: z.enum([
+            'none',
+            ...materialsStatuses,
         ]),
         createdAt: z.iso.datetime(),
     })
@@ -78,12 +84,13 @@ export const applicationCvSchema = z
     })
 export type ApplicationCv = z.infer<typeof applicationCvSchema>
 
-/** One application with its vacancy and CV (GET /applications/:id); the list stays light. */
+/** One application with its vacancy, CV and materials (GET /applications/:id); the list stays light. */
 export const applicationDetailSchema = applicationSchema
     .extend({
         /** Null for one created by hand. */
         vacancy: applicationVacancySchema.nullable(),
         cv: applicationCvSchema,
+        materials: applicationMaterialsSchema,
     })
     .meta({
         id: 'ApplicationDetail',
@@ -107,6 +114,16 @@ export const createApplicationSchema = z
         id: 'CreateApplication',
     })
 export type CreateApplication = z.output<typeof createApplicationSchema>
+
+/** Where the person is with an application, set by hand: `sent` once they applied. */
+export const updateApplicationSchema = z
+    .strictObject({
+        status: z.enum(applicationStatuses),
+    })
+    .meta({
+        id: 'UpdateApplication',
+    })
+export type UpdateApplication = z.output<typeof updateApplicationSchema>
 
 export const listApplicationsQuerySchema = z.object({
     limit: z.coerce.number().int().min(1).max(100).default(20),

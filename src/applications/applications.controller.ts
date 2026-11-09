@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common'
 import { ApiCreatedResponse, ApiHeader, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import type { AccessClaims } from '@nick-lukashik/auth'
 import { Caller } from '@nick-lukashik/auth/nest'
@@ -12,6 +12,8 @@ import {
     createApplicationSchema,
     type ListApplicationsQuery,
     listApplicationsQuerySchema,
+    type UpdateApplication,
+    updateApplicationSchema,
 } from './applications.schemas.js'
 import { ApplicationsService } from './applications.service.js'
 
@@ -55,6 +57,25 @@ export class ApplicationsController {
     @ApiErrors(401, 403, 404)
     get(@Caller() caller: AccessClaims, @Param('id') id: string) {
         return this.applications.get(id, caller.userId)
+    }
+
+    @Patch(':id')
+    @ApiOperation({
+        summary: "Set the status of one of the caller's applications, e.g. sent once they applied",
+    })
+    @ApiOkResponse({
+        standardSchema: applicationSchema,
+    })
+    @ApiErrors(400, 401, 403, 404)
+    update(
+        @Caller() caller: AccessClaims,
+        @Param('id') id: string,
+        @Body({
+            schema: updateApplicationSchema,
+        })
+        body: UpdateApplication,
+    ) {
+        return this.applications.updateStatus(id, caller.userId, body)
     }
 
     @Post()

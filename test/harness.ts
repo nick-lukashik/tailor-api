@@ -13,6 +13,7 @@ import { Metrics } from '../src/common/metrics/metrics.js'
 import { env } from '../src/config/env.js'
 import { CvGenerateJob } from '../src/cv-generation/cv-generate.job.js'
 import type { Db } from '../src/db/types.js'
+import { MaterialsGenerateJob } from '../src/materials/materials-generate.job.js'
 import { VacancyParseJob } from '../src/vacancies/vacancy-parse.job.js'
 import { TEST_BUCKET } from './containers.js'
 import { AUDIENCE, ISSUER, startIdentity } from './identity.js'
@@ -73,9 +74,10 @@ export async function startApp(overrides: Record<string, string | undefined> = {
     for (const queue of [
         ...app.get(VacancyParseJob).queues,
         ...app.get(CvGenerateJob).queues,
+        ...app.get(MaterialsGenerateJob).queues,
     ])
         await boss.deleteAllJobs(queue)
-    await db.execute(sql`truncate cvs, applications, vacancies, profiles, profile_snapshots`)
+    await db.execute(sql`truncate materials, cvs, applications, vacancies, profiles, profile_snapshots`)
     await app.listen(0, '127.0.0.1')
     const { registry } = app.get(Metrics)
 
@@ -110,6 +112,7 @@ export async function startApp(overrides: Record<string, string | undefined> = {
                 get: (path: string) => http().get(path).set('authorization', authorization),
                 post: (path: string) => http().post(path).set('authorization', authorization),
                 put: (path: string) => http().put(path).set('authorization', authorization),
+                patch: (path: string) => http().patch(path).set('authorization', authorization),
             }
         },
         /** Sum of a metric's series that carry `labels` (0 when none). */

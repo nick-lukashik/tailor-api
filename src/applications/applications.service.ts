@@ -6,12 +6,14 @@ import { notFound } from '../common/http/app-error.js'
 import { cursorCodec } from '../common/http/cursor.js'
 import { cvConfig } from '../config/config.js'
 import type { Db } from '../db/types.js'
+import { type ApplicationMaterials, materialsContentSchema } from '../materials/materials.schemas.js'
 import { parsedVacancySchema } from '../vacancies/parse.schemas.js'
 import {
     type ApplicationDetailView,
     ApplicationsRepository,
     type ApplicationView,
     type CvVersions,
+    type MaterialsVersions,
 } from './applications.repository.js'
 import {
     type Application,
@@ -21,6 +23,7 @@ import {
     applicationsCursorSchema,
     type CreateApplication,
     type ListApplicationsQuery,
+    type UpdateApplication,
 } from './applications.schemas.js'
 
 const cursor = cursorCodec(applicationsCursorSchema)
@@ -36,6 +39,7 @@ const toApplication = (row: ApplicationView): Application => ({
     vacancyId: row.vacancyId,
     parseStatus: row.parseStatus,
     cvStatus: row.cvStatus ?? 'none',
+    materialsStatus: row.materialsStatus ?? 'none',
     createdAt: row.createdAt.toISOString(),
 })
 
@@ -85,6 +89,46 @@ export class ApplicationsService {
             ...toApplication(row),
             vacancy: this.toVacancy(row),
             cv: this.toCv(row.id, await this.repository.cvVersions(row.id)),
+            materials: this.toMaterials(row.id, await this.repository.materialsVersions(row.id)),
+        }
+    }
+
+    /** Where the person is with their application (`sent` once they applied); someone else's is a 404. */
+    async updateStatus(id: string, userId: string, input: UpdateApplication): Promise<Application> {
+        const updated = uuid.safeParse(id).success && (await this.repository.updateStatus(id, userId, input))
+        const row = updated ? await this.repository.findOwned(id, userId) : undefined
+        if (!row) throw notFound('Application')
+        return toApplication(row)
+    }
+
+    /** The newest version's status and error; the texts of the newest ready one. */
+    private toMaterials(applicationId: string, { latest, ready }: MaterialsVersions): ApplicationMaterials {
+        if (!latest)
+            return {
+                status: 'none',
+            }
+        const content = ready ? materialsContentSchema.safeParse(ready.content) : undefined
+        if (content && !content.success)
+            this.logger.warn(
+                {
+                    applicationId,
+                },
+                'stored materials do not match the schema',
+            )
+        return {
+            status: latest.status,
+            version: latest.version,
+            ...(content?.success
+                ? {
+                      content: content.data,
+                  }
+                : {}),
+            ...(latest.error
+                ? {
+                      error: latest.error,
+                  }
+                : {}),
+            updatedAt: latest.updatedAt.toISOString(),
         }
     }
 

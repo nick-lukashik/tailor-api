@@ -184,6 +184,56 @@ export const cvs = pgTable(
     ],
 )
 
+/** Where the generation of an application's materials is: queued, then generating, then ready or failed. */
+export const materialsStatuses = cvStatuses
+
+/**
+ * The texts for applying by hand to an application's vacancy (src/materials):
+ * a cover letter, an e-mail, a Telegram message, a LinkedIn note and why me,
+ * written from one CV version by the `materials.generate` job. Versions 1, 2, …
+ * per application; the newest one is shown.
+ */
+export const materials = pgTable(
+    'materials',
+    {
+        id: uuid('id').primaryKey().default(sql`uuidv7()`),
+        applicationId: uuid('application_id')
+            .notNull()
+            .references(() => applications.id, {
+                onDelete: 'restrict',
+            }),
+        /** The CV version the texts were written from (its document and link). */
+        cvId: uuid('cv_id')
+            .notNull()
+            .references(() => cvs.id, {
+                onDelete: 'restrict',
+            }),
+        version: integer('version').notNull(),
+        status: text('status', {
+            enum: materialsStatuses,
+        })
+            .notNull()
+            .default('queued'),
+        model: text('model'),
+        effort: text('effort'),
+        promptVersion: integer('prompt_version'),
+        /** The texts, the CV link already in them (`MaterialsContent`); null until ready. */
+        content: jsonb('content').$type<unknown>(),
+        /** A short code when failed. */
+        error: text('error'),
+        createdAt: at('created_at').notNull().defaultNow(),
+        updatedAt: at('updated_at').notNull().defaultNow(),
+    },
+    t => [
+        unique('materials_application_id_version_key').on(t.applicationId, t.version),
+        index('materials_cv_id_idx').on(t.cvId),
+        check('materials_version', sql`${t.version} >= 1`),
+        check('materials_status', sql`${t.status} in ('queued', 'generating', 'ready', 'failed')`),
+        check('materials_error_length', sql`char_length(${t.error}) <= 100`),
+        check('materials_ready_content', sql`${t.status} <> 'ready' or ${t.content} is not null`),
+    ],
+)
+
 /** A section of the profile document, typed by its Zod schema (src/profile/profile.schemas.ts). */
 const section = <K extends keyof ProfileDocument>(name: string) => jsonb(name).$type<ProfileDocument[K]>().notNull()
 

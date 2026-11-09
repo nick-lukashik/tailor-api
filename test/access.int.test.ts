@@ -9,7 +9,7 @@ describe('access: id tokens and the tailor role', () => {
     let t: TestApp
     /** Every route of the API under /api/v1 but the public CV files, from the OpenAPI document. */
     let routes: {
-        method: 'get' | 'post' | 'put'
+        method: 'get' | 'post' | 'put' | 'patch'
         path: string
     }[]
 
@@ -18,7 +18,7 @@ describe('access: id tokens and the tailor role', () => {
         const { body } = await t.http().get('/openapi.json')
         routes = Object.entries(body.paths as Record<string, Record<string, unknown>>).flatMap(([path, methods]) =>
             Object.keys(methods).map(method => ({
-                method: method as 'get' | 'post' | 'put',
+                method: method as 'get' | 'post' | 'put' | 'patch',
                 path: path.replace('{id}', '019a5f00-0000-7000-8000-000000000001'),
             })),
         )

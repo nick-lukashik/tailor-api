@@ -187,8 +187,8 @@ export class CvsRepository {
             .where(eq(cvs.id, id))
     }
 
-    async markReady(id: string, fields: Pick<CvRow, 'fileKey' | 'fileName' | 'pages' | 'document'>) {
-        await this.db
+    async markReady(tx: Tx, id: string, fields: Pick<CvRow, 'fileKey' | 'fileName' | 'pages' | 'document'>) {
+        await tx
             .update(cvs)
             .set({
                 ...fields,
