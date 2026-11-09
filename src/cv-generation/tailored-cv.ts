@@ -40,7 +40,7 @@ export function rowItems(row: TailoredContent['skills'][number], drops: number):
 
 /**
  * The tailored CV document for tailor-tex: the header, education and
- * languages as the master CV has them (`cvFrame`), the vacancy's own title as
+ * languages as the master CV has them (`cvFrame`), the CV title (`title.ts`) as
  * the headline (Work Finder), the composed summary, jobs and skills as the
  * fit state has them.
  */

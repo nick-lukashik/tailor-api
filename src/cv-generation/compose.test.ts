@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { aiProfile, exampleCase } from '../../test/fixtures/cv-profile.js'
 import type { EmploymentPlan } from './analysis.js'
-import { bulletVariants, cleanText, composeJobs, composeSummary, keepsFigures } from './compose.js'
+import {
+    bulletChanges,
+    bulletVariants,
+    cleanText,
+    composeJobs,
+    composeSummary,
+    dropHedges,
+    keepsFigures,
+    type TailoredJob,
+} from './compose.js'
 
 const metricCase = exampleCase('m1', 'acme', {
     metricClaims: [
@@ -160,6 +169,103 @@ describe('composing a CV from the cases', () => {
             id: 'ai_tools',
             full: 'Builds LLM features with evaluation.',
             compact: 'LLM.',
+        })
+    })
+
+    it('drops hedges before a figure, never the figure', () => {
+        expect(dropHedges('Reached **profitability in roughly 3 months**.')).toBe(
+            'Reached **profitability in 3 months**.',
+        )
+        expect(dropHedges('Roughly seven services, about 40% faster, around two calls.')).toBe(
+            'Seven services, 40% faster, two calls.',
+        )
+        expect(dropHedges('Talked about the design.')).toBe('Talked about the design.')
+    })
+
+    it('counts the bullets left as the profile wrote them, and expects most to change for another stack', () => {
+        const python = exampleCase('p1', 'acme', {
+            technologies: [
+                'Python',
+                'FastAPI',
+            ],
+            variants: {
+                full: 'Built an ingestion pipeline with signed uploads and background processing in roughly 3 weeks.',
+                compact: 'Built an ingestion pipeline with signed uploads.',
+                minimal: 'Built an ingestion pipeline.',
+            },
+        })
+        const cases = [
+            python,
+            exampleCase('a2', 'acme'),
+            exampleCase('a3', 'acme'),
+        ]
+        const profile = aiProfile()
+        const acme = profile.employments.find(item => item.id === 'acme')
+        if (!acme) throw new Error('no acme')
+        const job = (texts: Record<string, string | undefined>): TailoredJob[] => [
+            {
+                employment: acme,
+                minBullets: 0,
+                bullets: cases.map(item => {
+                    const own = texts[item.id]
+                    return {
+                        caseId: item.id,
+                        score: 1,
+                        sourced: false,
+                        variants: own
+                            ? {
+                                  full: own,
+                                  compact: own,
+                                  minimal: own,
+                              }
+                            : {
+                                  ...item.variants,
+                                  full: item.variants.full.replace('roughly ', ''),
+                              },
+                    }
+                }),
+            },
+        ]
+        const stack = [
+            'Python',
+            'FastAPI',
+        ]
+        expect(bulletChanges(job({}), cases, stack)).toEqual({
+            bullets: 3,
+            unchanged: 3,
+            expected: 3,
+            unchangedExpected: 3,
+            tailored: false,
+        })
+        expect(
+            bulletChanges(
+                job({
+                    p1: 'Built a Python and FastAPI ingestion pipeline with signed uploads in 3 weeks.',
+                    a2: 'Built the a2 backend service end to end.',
+                }),
+                cases,
+                stack,
+            ),
+        ).toMatchObject({
+            unchanged: 1,
+            unchangedExpected: 1,
+            tailored: true,
+        })
+        // A case whose wording names the whole stack is not expected to change.
+        expect(
+            bulletChanges(
+                job({}),
+                [
+                    exampleCase('a2', 'acme'),
+                ],
+                [
+                    'a2',
+                ],
+            ),
+        ).toMatchObject({
+            bullets: 1,
+            expected: 0,
+            tailored: true,
         })
     })
 })

@@ -13,17 +13,26 @@ import type { CvDocument, CvMeasurement } from '../tex/cv-document.js'
 import { TailorTexClient } from '../tex/tailor-tex.client.js'
 import type { ParsedVacancy } from '../vacancies/parse.schemas.js'
 import { type Analysis, decideAiRole, groundAnalysis, planEmployments } from './analysis.js'
-import { composeJobs, composeSkills, composeSummary, type TailoredContent, tailoredSummarySource } from './compose.js'
+import {
+    bulletChanges,
+    composeJobs,
+    composeSkills,
+    composeSummary,
+    type TailoredContent,
+    tailoredSummarySource,
+} from './compose.js'
 import {
     analysisSystemPrompt,
     analysisUserMessage,
     compositionSystemPrompt,
     compositionUserMessage,
+    vacancyStack,
 } from './cv.prompts.js'
 import { analysisAnswerSchema, compositionAnswerSchema } from './cv-generation.schemas.js'
 import { fitCv } from './fitting.js'
-import { missingSkills } from './skills.js'
+import { missingSkills, normalizeVacancySkills } from './skills.js'
 import { buildTailoredCv, bulletId, initialFitState } from './tailored-cv.js'
+import { cvTitle } from './title.js'
 
 /**
  * A step that cannot go on, with a short code stored on the CV. `retryable`:
@@ -60,6 +69,8 @@ export type GeneratedCv = {
     builds: number
     nearMiss: boolean
     sourcedBullets: number
+    /** Bullets printed as their case's own text (a count, never the text). */
+    unchangedBullets: number
 }
 
 const TEMPLATE = 'minimal-violet'
@@ -140,14 +151,35 @@ export class CvGenerator {
             idempotencyKey: `cv-compose-${input.cvId}-${slug}`,
             signal: input.signal,
         })
-        const vacancySkills = parsed.skills.filter(skill => skill.name.trim())
+        const vacancySkills = normalizeVacancySkills(
+            parsed.skills.filter(skill => skill.name.trim()),
+            composition.output.vacancySkills,
+            skillRows,
+        )
         const content: TailoredContent = {
             summary: composeSummary(profile, analysis.aiRole, composition.output.summary),
             jobs: composeJobs(plans, composition.output.employments),
             skills: composeSkills(profile, analysis.aiRole, composition.output.skills, vacancySkills, analysis),
         }
+        const changes = bulletChanges(content.jobs, profile.cases, vacancyStack(parsed, analysis))
+        if (!changes.tailored)
+            this.logger.warn(
+                {
+                    cvId: input.cvId,
+                    bullets: changes.bullets,
+                    unchanged: changes.unchanged,
+                    expected: changes.expected,
+                    unchangedExpected: changes.unchangedExpected,
+                },
+                'Most bullets not tailored to the vacancy',
+            )
 
-        const headline = (title || cvHeadline(profile)).slice(0, 120).trim()
+        // English, senior, at most 60 characters: the headline and the file name.
+        const headline = cvTitle({
+            proposed: composition.output.title,
+            vacancyTitle: title,
+            headline: cvHeadline(profile),
+        })
         const caseIndex = new Map(
             profile.cases.map((item, index) => [
                 item.id,
@@ -231,12 +263,13 @@ export class CvGenerator {
         return {
             document: fit.document,
             fileKey,
-            fileName: cvFileName(cvName(profile), title || headline),
+            fileName: cvFileName(cvName(profile), headline),
             role: headline,
             pages: rendered.pages ?? fit.measurement.pages,
             builds: fit.builds,
             nearMiss: fit.nearMiss,
             sourcedBullets: content.jobs.flatMap(job => job.bullets).filter(bullet => bullet.sourced).length,
+            unchangedBullets: changes.unchanged,
         }
     }
 }

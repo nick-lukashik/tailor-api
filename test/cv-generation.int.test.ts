@@ -85,6 +85,7 @@ const analysis: AnalysisAnswer = {
 }
 
 const composition: CompositionAnswer = {
+    title: 'Senior Backend Engineer',
     summary: [
         {
             id: 'profile',
@@ -111,6 +112,18 @@ const composition: CompositionAnswer = {
             items: [
                 'React',
             ],
+        },
+    ],
+    vacancySkills: [
+        {
+            name: 'Node.js',
+            english: 'Node.js',
+            row: 'Frontend',
+        },
+        {
+            name: 'K8s',
+            english: 'Kubernetes',
+            row: 'Frontend',
         },
     ],
 }
@@ -172,24 +185,28 @@ describe('CV generation', () => {
             interval: 200,
         })
     /** A parsed vacancy and the owner's application for it, without going through the parse job. */
-    const parsedApplication = async (userId = OWNER, parseStatus: 'parsed' | 'pending' = 'parsed') => {
-        const [vacancy] = await t.db
+    const parsedApplication = async (
+        userId = OWNER,
+        parseStatus: 'parsed' | 'pending' = 'parsed',
+        vacancy: ParsedVacancy = parsed,
+    ) => {
+        const [row] = await t.db
             .insert(vacancies)
             .values({
                 rawText: 'Example Labs hires a Senior Backend Engineer.',
-                title: parsed.title ?? '',
-                company: parsed.company ?? '',
+                title: vacancy.title ?? '',
+                company: vacancy.company ?? '',
                 parseStatus,
-                parsed: parseStatus === 'parsed' ? parsed : null,
+                parsed: parseStatus === 'parsed' ? vacancy : null,
                 createdBy: userId,
             })
             .returning()
-        if (!vacancy) throw new Error('no vacancy')
+        if (!row) throw new Error('no vacancy')
         const [application] = await t.db
             .insert(applications)
             .values({
                 userId,
-                vacancyId: vacancy.id,
+                vacancyId: row.id,
                 company: 'Example Labs',
                 role: 'Senior Backend Engineer',
             })
@@ -217,7 +234,7 @@ describe('CV generation', () => {
             fileKey: `tailor/cv/${applicationId}/${row?.id}.pdf`,
             role: 'Senior Backend Engineer',
             effort: 'low',
-            promptVersion: 2,
+            promptVersion: 3,
             profileVersion: 1,
             aiRole: false,
             pages: 1,
@@ -440,6 +457,69 @@ describe('CV generation', () => {
         t.llm.answer(scripted())
         expect((await (await t.as()).post(`/api/v1/applications/${applicationId}/cv`)).status).toBe(202)
         await settled(applicationId, 2).toBe('ready')
+    })
+
+    it('titles the CV in English for a Russian vacancy, never with an entry-level word', async () => {
+        const russian: ParsedVacancy = {
+            ...parsed,
+            title: 'Backend-разработчик Python (начинающий)',
+            seniority: 'junior',
+            language: 'ru',
+            skills: [
+                {
+                    name: 'Python',
+                    required: true,
+                },
+                {
+                    name: 'unit-тесты',
+                    required: false,
+                },
+            ],
+        }
+        const applicationId = await parsedApplication(OWNER, 'parsed', russian)
+        const answer = (title: string) =>
+            scripted({
+                cv_composition: () =>
+                    completionOf({
+                        ...composition,
+                        title,
+                        vacancySkills: [
+                            {
+                                name: 'Python',
+                                english: 'Python',
+                                row: 'Frontend',
+                            },
+                            {
+                                name: 'unit-тесты',
+                                english: 'Unit testing',
+                                row: 'Frontend',
+                            },
+                        ],
+                    }),
+            })
+        t.llm.answer(answer('Senior Backend Engineer (Python)'))
+        await (await t.as()).post(`/api/v1/applications/${applicationId}/cv`)
+        await settled(applicationId, 1).toBe('ready')
+        const [first] = await cvRows(applicationId)
+        expect(first?.fileName).toBe('Alex-Example-Senior-Backend-Engineer-Python-CV.pdf')
+        const document = first?.document as CvDocument
+        expect(document.headline).toBe('Senior Backend Engineer (Python)')
+        const items = document.skills.flatMap(skill => skill.items)
+        expect(items).toEqual(
+            expect.arrayContaining([
+                'Python',
+                'Unit testing',
+            ]),
+        )
+        expect(items.filter(item => /[^\x20-\x7E]/.test(item))).toEqual([])
+
+        // A proposal with an entry-level word, and a vacancy title that is not English: the profile's headline.
+        t.llm.answer(answer('Junior Python Developer'))
+        await (await t.as()).post(`/api/v1/applications/${applicationId}/cv`)
+        await settled(applicationId, 2).toBe('ready')
+        const second = (await cvRows(applicationId))[1]
+        expect(second?.fileName).toBe('Alex-Example-Senior-Full-Stack-Engineer-CV.pdf')
+        expect((second?.document as CvDocument | undefined)?.headline).toBe('Senior Full-Stack Engineer')
     })
 
     it('fails a CV that does not fit the pages as cv_does_not_fit', async () => {

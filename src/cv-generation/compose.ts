@@ -1,7 +1,7 @@
 import type { ProfileDocument } from '../profile/profile.schemas.js'
 import type { Analysis, EmploymentPlan } from './analysis.js'
 import type { CompositionAnswer } from './cv-generation.schemas.js'
-import { type TailoredSkillRow, tailorSkills, type VacancySkill } from './skills.js'
+import { skillKey, type TailoredSkillRow, tailorSkills, textSkillKeys, type VacancySkill } from './skills.js'
 
 /*
  * The composition applied in code (Work Finder's composition policy and
@@ -61,6 +61,20 @@ export const cleanText = (value: string, max: number) =>
         .slice(0, max)
         .trim()
 
+const NUMBER_WORDS =
+    'one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|a dozen|dozens|a hundred|hundreds|a thousand|thousands'
+const HEDGE = new RegExp(
+    `\\b(?:roughly|approximately|approx\\.|about|around|circa)\\s+(?=(?:\\*\\*)?(?:[~$€£]?\\d|(?:${NUMBER_WORDS})\\b))`,
+    'gi',
+)
+
+/** A figure stated without a hedge: `roughly 3 months` → `3 months` (the case's figure stays). */
+export function dropHedges(value: string): string {
+    const dropped = value.replace(HEDGE, '')
+    const opening = /^(\*\*)?[A-Z]/.test(value)
+    return opening && /^(\*\*)?[a-z]/.test(dropped) ? dropped.replace(/[a-z]/, letter => letter.toUpperCase()) : dropped
+}
+
 /** The figures of a text: `2x`, `3.5`, `40%` → `2`, `3.5`, `40`. */
 export const figures = (value: string) => value.match(/\d+(?:[.,]\d+)*/g) ?? []
 
@@ -95,10 +109,10 @@ export function bulletVariants(
     const allowed = caseFigures(item)
     let sourced = !answer
     const pick = (name: VariantName) => {
-        const text = answer ? cleanText(answer[name], BULLET_MAX) : ''
+        const text = answer ? dropHedges(cleanText(answer[name], BULLET_MAX)) : ''
         if (text && keepsFigures(text, allowed)) return text
         sourced = true
-        return cleanText(item.variants[name], BULLET_MAX)
+        return dropHedges(cleanText(item.variants[name], BULLET_MAX))
     }
     const full = pick('full')
     const compactText = pick('compact')
@@ -164,6 +178,67 @@ export function composeJobs(plans: EmploymentPlan[], answer: CompositionAnswer['
             bullets,
         }
     })
+}
+
+/** A bullet's text for comparison: case, bold, hedges, punctuation and spacing aside. */
+const comparable = (value: string) =>
+    dropHedges(value)
+        .replace(/\*\*/g, '')
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .trim()
+
+export type BulletChanges = {
+    bullets: number
+    /** Bullets printed as their case's own text, the fallback included. */
+    unchanged: number
+    /** Bullets whose case wording does not name the whole vacancy stack: they must be tailored. */
+    expected: number
+    unchangedExpected: number
+    /** Most of the expected bullets differ from their case's text. */
+    tailored: boolean
+}
+
+/**
+ * How many chosen bullets the composition left as the profile wrote them.
+ * A bullet is expected to change when the vacancy's stack names a technology
+ * its case's wording does not: then at least most such bullets must differ.
+ */
+export function bulletChanges(jobs: TailoredJob[], cases: ProfileCase[], stack: string[]): BulletChanges {
+    const byId = new Map(
+        cases.map(item => [
+            item.id,
+            item,
+        ]),
+    )
+    const stackKeys = [
+        ...new Set(stack.map(skillKey).filter(Boolean)),
+    ]
+    let bullets = 0
+    let unchanged = 0
+    let expected = 0
+    let unchangedExpected = 0
+    for (const bullet of jobs.flatMap(job => job.bullets)) {
+        const item = byId.get(bullet.caseId)
+        if (!item) continue
+        bullets += 1
+        const sources = new Set(variantNames.map(name => comparable(item.variants[name])))
+        const same = variantNames.every(name => sources.has(comparable(bullet.variants[name])))
+        const wording = textSkillKeys(variantNames.map(name => item.variants[name]).join(' '))
+        const differs = stackKeys.some(key => !wording.has(key))
+        if (same) unchanged += 1
+        if (differs) {
+            expected += 1
+            if (same) unchangedExpected += 1
+        }
+    }
+    return {
+        bullets,
+        unchanged,
+        expected,
+        unchangedExpected,
+        tailored: unchangedExpected * 2 <= expected,
+    }
 }
 
 /** The summary paragraphs for this vacancy (the AI-only ones only for an AI role, D-115), at most the template's 2. */
