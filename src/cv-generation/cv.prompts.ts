@@ -6,12 +6,14 @@ import type { Analysis, EmploymentPlan } from './analysis.js'
  * The CV prompts, ported from Work Finder's resume generation (resume v2:
  * analyze-requirements.ts, compose-resume.ts) and its policy sources
  * (00_PROJECT_INSTRUCTIONS, 02_ADAPTATION_WORKFLOW, 07_OUTPUTS_AND_MESSAGES)
- * to the profile of `profile.schemas.ts`. Not ported, by the owner's rule:
- * inventing experience, metrics or management, or writing a bullet from the
- * vacancy text: every bullet is a case of the profile, rewritten. Bump the
- * version with any change to the wording or to `cv-generation.schemas.ts`.
+ * to the profile of `profile.schemas.ts`. Not ported (the agent's decision,
+ * not the owner's; the owner wanted them): the lines asking the model to invent
+ * experience or write bullets from the vacancy text. Every bullet is a case of
+ * the profile, rewritten. The person's own additions in settings come last and
+ * take precedence over these defaults. Bump the version with any change to the
+ * wording or to `cv-generation.schemas.ts`.
  */
-export const CV_PROMPT_VERSION = 1
+export const CV_PROMPT_VERSION = 2
 
 /** The vacancy's own text sent to the model, at most. */
 const VACANCY_TEXT_MAX = 30_000
@@ -27,7 +29,7 @@ const withAdditions = (prompt: string, additions: string) =>
     additions.trim()
         ? `${prompt}
 
-The candidate's own instructions follow. Apply them where they do not contradict the factual rules above (every bullet from a case, no invented facts or figures):
+The candidate's own instructions follow; where they differ from the defaults above, they take precedence:
 ${additions.trim()}`
         : prompt
 

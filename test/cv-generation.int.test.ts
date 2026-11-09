@@ -217,7 +217,7 @@ describe('CV generation', () => {
             fileKey: `tailor/cv/${applicationId}/${row?.id}.pdf`,
             role: 'Senior Backend Engineer',
             effort: 'low',
-            promptVersion: 1,
+            promptVersion: 2,
             profileVersion: 1,
             aiRole: false,
             pages: 1,
