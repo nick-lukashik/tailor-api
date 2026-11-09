@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { LlmCallError } from '../llm/llm-gateway.js'
-import { afterFailure, assignQueues, parseQueueName } from './parse-pool.js'
+import { parseQueueName } from '../vacancies/parse-pool.js'
+import { LlmCallError } from './llm-gateway.js'
+import { afterFailure, assignQueues, poolQueueName } from './model-pool.js'
 
 const SONNET = parseQueueName('claude-sonnet-5-5')
 const GPT = parseQueueName('gpt-6.1-sol')
@@ -9,12 +10,13 @@ const queues = [
     GPT,
 ]
 
-describe('parse queues', () => {
-    it('names one queue per model', () => {
+describe('pool queues', () => {
+    it('names one queue per model of a job', () => {
         expect(queues).toEqual([
             'vacancy.parse.claude-sonnet-5-5',
             'vacancy.parse.gpt-6-1-sol',
         ])
+        expect(poolQueueName('cv.generate', 'gpt-6.1-sol')).toBe('cv.generate.gpt-6-1-sol')
     })
 
     it('picks the queue with fewer live jobs, ties in config order', () => {
@@ -118,7 +120,7 @@ describe('parse queues', () => {
     })
 })
 
-describe('after a failed parse call', () => {
+describe('after a failed call', () => {
     const attempt = (retryCount: number, canMove: boolean) => ({
         retryCount,
         retryLimit: 5,

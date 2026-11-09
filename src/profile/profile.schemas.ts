@@ -552,6 +552,15 @@ export const settingsSchema = z
         cvShowLocation: z.boolean().default(true),
         /** The CV header shows the phone (D-120). */
         cvShowPhone: z.boolean().default(true),
+        /**
+         * The person's own instructions appended to the prompts, so generation
+         * can be tuned without a release. `cv`: the CV prompts (analysis and composition).
+         */
+        promptAdditions: z
+            .strictObject({
+                cv: text(4_000),
+            })
+            .prefault({}),
     })
     .meta({
         id: 'ProfileSettings',

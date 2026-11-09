@@ -270,5 +270,8 @@ export const exampleProfile = () => ({
         factsMode: 'strict',
         cvShowLocation: true,
         cvShowPhone: true,
+        promptAdditions: {
+            cv: 'Prefer measurable results.',
+        },
     },
 })

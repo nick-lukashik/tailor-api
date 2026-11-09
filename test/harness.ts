@@ -11,8 +11,10 @@ import { DB } from '../src/common/database/database.js'
 import { PG_BOSS } from '../src/common/jobs/jobs.module.js'
 import { Metrics } from '../src/common/metrics/metrics.js'
 import { env } from '../src/config/env.js'
+import { CvGenerateJob } from '../src/cv-generation/cv-generate.job.js'
 import type { Db } from '../src/db/types.js'
 import { VacancyParseJob } from '../src/vacancies/vacancy-parse.job.js'
+import { TEST_BUCKET } from './containers.js'
 import { AUDIENCE, ISSUER, startIdentity } from './identity.js'
 import { LLM_TEST_KEY, startLlmGateway } from './llm-gateway.js'
 
@@ -22,12 +24,13 @@ export const OWNER = '019a5f00-0000-7000-8000-00000000a001'
 export type TestApp = Awaited<ReturnType<typeof startApp>>
 
 /**
- * The real AppModule against the shared containers and stand-ins for id-api
- * and llm-gateway, listening on a random port. Every file starts from empty
- * tables and no queued jobs.
+ * The real AppModule against the shared containers (Postgres, the S3 stand-in
+ * for R2) and stand-ins for id-api and llm-gateway, listening on a random
+ * port. Every file starts from empty tables and no queued jobs. An override
+ * that is undefined unsets the variable.
  * `http()` calls as nobody; `as(userId)` with that person's access token.
  */
-export async function startApp(overrides: Record<string, string> = {}) {
+export async function startApp(overrides: Record<string, string | undefined> = {}) {
     const identity = await startIdentity()
     const llm = await startLlmGateway()
     Object.assign(process.env, {
@@ -41,8 +44,15 @@ export async function startApp(overrides: Record<string, string> = {}) {
         TOKEN_AUDIENCE: AUDIENCE,
         LLM_GATEWAY_URL: llm.url,
         LLM_GATEWAY_KEY: LLM_TEST_KEY,
-        ...overrides,
+        R2_ENDPOINT: inject('s3Url'),
+        R2_ACCESS_KEY_ID: 'test-access-key',
+        R2_SECRET_ACCESS_KEY: 'test-secret-key',
+        R2_BUCKET: TEST_BUCKET,
     })
+    for (const [name, value] of Object.entries(overrides)) {
+        if (value === undefined) delete process.env[name]
+        else process.env[name] = value
+    }
     env.reset()
 
     const { AppModule } = await import('../src/app.module.js')
@@ -60,8 +70,12 @@ export async function startApp(overrides: Record<string, string> = {}) {
 
     const db = app.get<Db>(DB)
     const boss = app.get<PgBoss>(PG_BOSS)
-    for (const queue of app.get(VacancyParseJob).queues) await boss.deleteAllJobs(queue)
-    await db.execute(sql`truncate applications, vacancies, profiles, profile_snapshots`)
+    for (const queue of [
+        ...app.get(VacancyParseJob).queues,
+        ...app.get(CvGenerateJob).queues,
+    ])
+        await boss.deleteAllJobs(queue)
+    await db.execute(sql`truncate cvs, applications, vacancies, profiles, profile_snapshots`)
     await app.listen(0, '127.0.0.1')
     const { registry } = app.get(Metrics)
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { exampleProfile } from '../../test/fixtures/profile.js'
-import { profileDocumentSchema, profileJsonSchema, profileSections } from './profile.schemas.js'
+import { profileDocumentSchema, profileJsonSchema, profileSections, settingsSchema } from './profile.schemas.js'
 
 const issuesOf = (input: unknown) => {
     const result = profileDocumentSchema.safeParse(input)
@@ -38,8 +38,28 @@ describe('profile document', () => {
                 factsMode: 'strict',
                 cvShowLocation: true,
                 cvShowPhone: true,
+                promptAdditions: {
+                    cv: '',
+                },
             },
         })
+    })
+
+    it('keeps an old settings section valid: the prompt additions default to empty', () => {
+        const parsed = settingsSchema.parse({
+            maxPages: 1,
+            cvShowPhone: false,
+        })
+        expect(parsed.promptAdditions).toEqual({
+            cv: '',
+        })
+        expect(
+            settingsSchema.safeParse({
+                promptAdditions: {
+                    cv: 'x'.repeat(4_001),
+                },
+            }).success,
+        ).toBe(false)
     })
 
     it('keeps a full profile as it is', () => {

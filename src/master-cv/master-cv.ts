@@ -53,7 +53,7 @@ const LANGUAGE_LEVELS: Record<ProfileDocument['languages'][number]['level'], str
 }
 
 /** Bullet ids are the measured blocks of tailor-tex (`bullet:<id>`), at most 40 characters. */
-const BULLET_ID_MAX = 40
+export const BULLET_ID_MAX = 40
 
 /** The name in English (CVs are English only, D-99), else the first one given. */
 export function cvName(profile: ProfileDocument) {
@@ -72,7 +72,8 @@ const linkText = (url: string) =>
         .replace(/\/+$/, '')
         .slice(0, 120)
 
-function links(profile: ProfileDocument): CvDocument['links'] {
+/** The links of the header: the e-mail and Telegram added when no link has them; at most 8. */
+export function cvLinks(profile: ProfileDocument): CvDocument['links'] {
     const { email, telegram } = profile.person
     const own = profile.person.links.map(link => ({
         url: link.url,
@@ -177,20 +178,11 @@ export function cvLocation({ city, country, timezone }: ProfileDocument['person'
  * a missing or too long value is left for `masterCvIssues` to report.
  */
 export function buildMasterCv(profile: ProfileDocument): CvDocument {
-    const name = cvName(profile)
     const headline = cvHeadline(profile)
-    const { settings } = profile
-    const phone = settings.cvShowPhone ? profile.person.phone : undefined
     return {
-        name,
-        location: settings.cvShowLocation
-            ? cvLocation(profile.person.location, profile.applicationFacts.workFormats.includes('remote'))
-            : '',
-        phoneDisplay: phone?.display ?? '',
-        phoneDigits: phone?.e164 ?? '',
+        ...cvFrame(profile),
         headline,
         stack: profile.career.stackLine,
-        links: links(profile),
         summary: profile.summary
             .filter(item => !item.aiOnly)
             .map(item => item.full || item.compact)
@@ -205,6 +197,33 @@ export function buildMasterCv(profile: ProfileDocument): CvDocument {
             .filter(row => row.items.length)
             .slice(0, 14),
         jobs: jobs(profile).slice(0, 10),
+        pdf: {
+            title: '',
+            subject: headline ? `${headline} CV` : '',
+            keywords: unique(
+                profile.skills.flatMap(row => row.items.filter(item => item.core).map(item => item.name)),
+            ).slice(0, 200),
+        },
+    }
+}
+
+/**
+ * What every CV of a person shares, whatever the vacancy: the header (name,
+ * location, phone, links, per the settings), education and languages.
+ */
+export function cvFrame(
+    profile: ProfileDocument,
+): Pick<CvDocument, 'name' | 'location' | 'phoneDisplay' | 'phoneDigits' | 'links' | 'education' | 'languages'> {
+    const { settings } = profile
+    const phone = settings.cvShowPhone ? profile.person.phone : undefined
+    return {
+        name: cvName(profile),
+        location: settings.cvShowLocation
+            ? cvLocation(profile.person.location, profile.applicationFacts.workFormats.includes('remote'))
+            : '',
+        phoneDisplay: phone?.display ?? '',
+        phoneDigits: phone?.e164 ?? '',
+        links: cvLinks(profile),
         education: profile.education.degrees.slice(0, 4).map(degree => ({
             degree: [
                 degree.degree,
@@ -222,13 +241,6 @@ export function buildMasterCv(profile: ProfileDocument): CvDocument {
                 name: language.name,
                 level: language.note || LANGUAGE_LEVELS[language.level],
             })),
-        pdf: {
-            title: '',
-            subject: headline ? `${headline} CV` : '',
-            keywords: unique(
-                profile.skills.flatMap(row => row.items.filter(item => item.core).map(item => item.name)),
-            ).slice(0, 200),
-        },
     }
 }
 

@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { baseEnvSchema, defineEnv, metricsEnvSchema, postgresEnvSchema } from '../common/config/define-env.js'
 
-/** Reasoning efforts a parse model may be given (`reasoning_effort` of the gateway). */
-export const PARSE_EFFORTS = [
+/** Reasoning efforts a pool model may be given (`reasoning_effort` of the gateway). */
+export const MODEL_EFFORTS = [
     'minimal',
     'low',
     'medium',
@@ -12,12 +12,12 @@ export const PARSE_EFFORTS = [
 /** A model id as a part of a queue name: `gpt-6.1-sol` → `gpt-6-1-sol`. */
 export const modelSlug = (model: string) => model.replace(/[^a-z0-9]+/g, '-')
 
-const parseModelEntry = z
+const poolModelEntry = z
     .tuple([
         z.string().regex(/^[a-z0-9]+([._-][a-z0-9]+)*$/, {
             error: 'a gateway model id such as claude-sonnet-5-5',
         }),
-        z.enum(PARSE_EFFORTS),
+        z.enum(MODEL_EFFORTS),
         z.coerce.number().int().min(1).max(10),
     ])
     .transform(([model, effort, concurrency]) => ({
@@ -26,23 +26,33 @@ const parseModelEntry = z
         concurrency,
     }))
 
-/** `model:effort:concurrency,…`: the models that parse vacancies, one queue each, in this order on a tie. */
-const parseModels = z
-    .string()
-    .default('claude-sonnet-5-5:low:3,gpt-6.1-sol:low:3')
-    .transform((value): unknown => value.split(',').map(entry => entry.split(':').map(part => part.trim())))
-    .pipe(
-        z
-            .array(parseModelEntry)
-            .min(1)
-            .refine(entries => new Set(entries.map(entry => modelSlug(entry.model))).size === entries.length, {
-                error: 'every model at most once',
-                // Only once every entry parsed.
-                when: payload => payload.issues.length === 0,
-            }),
-    )
+/** `model:effort:concurrency,…`: the models of a job, one queue each, in this order on a tie. */
+const modelPool = (defaults: string) =>
+    z
+        .string()
+        .default(defaults)
+        .transform((value): unknown => value.split(',').map(entry => entry.split(':').map(part => part.trim())))
+        .pipe(
+            z
+                .array(poolModelEntry)
+                .min(1)
+                .refine(entries => new Set(entries.map(entry => modelSlug(entry.model))).size === entries.length, {
+                    error: 'every model at most once',
+                    // Only once every entry parsed.
+                    when: payload => payload.issues.length === 0,
+                }),
+        )
 
-export type ParseModel = z.output<typeof parseModelEntry>
+/** A model of a job's pool: its id, effort and how many calls a pod makes with it at once. */
+export type PoolModelConfig = z.output<typeof poolModelEntry>
+
+/** `tailor/`: a prefix of object keys, empty or ending in `/`, never starting with one. */
+const objectPrefix = z
+    .string()
+    .regex(/^([A-Za-z0-9._-]+\/)*$/, {
+        error: 'empty, or path segments each ending in /, e.g. tailor/',
+    })
+    .default('tailor/')
 
 /** Every variable this service reads. Nothing else touches process.env. */
 export const envSchema = baseEnvSchema
@@ -62,13 +72,51 @@ export const envSchema = baseEnvSchema
                 error: 'at least 32 characters (the INTERNAL_API_TOKEN of tailor-tex)',
             })
             .optional(),
-        /** The platform LLM gateway (OpenAI-compatible), its client key and the models that parse vacancies. */
+        /** The platform LLM gateway (OpenAI-compatible), its client key and the models that parse vacancies and write CVs. */
         LLM_GATEWAY_URL: z.url().default('http://llm-gateway.prod.svc'),
         LLM_GATEWAY_KEY: z.string().min(32, {
             error: 'at least 32 characters (the client key of tailor-api in llm-gateway)',
         }),
-        LLM_PARSE_MODELS: parseModels,
+        LLM_PARSE_MODELS: modelPool('claude-sonnet-5-5:low:3,gpt-6.1-sol:low:3'),
+        LLM_CV_MODELS: modelPool('claude-sonnet-5-5:low:3,gpt-6.1-sol:low:3'),
+        /**
+         * Cloudflare R2 (S3 API) for the CV files: the account endpoint and an
+         * API token's key pair, all three or none. Unset: the service starts,
+         * and a CV generation fails with `storage_not_configured`.
+         */
+        R2_ENDPOINT: z.url().optional(),
+        R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+        R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+        R2_BUCKET: z
+            .string()
+            .regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/, {
+                error: 'an R2 bucket name: lowercase letters, digits and -',
+            })
+            .default('nl-files-prod'),
+        /** Every key of this service starts with it: one bucket, a folder per service. */
+        R2_PREFIX: objectPrefix,
+        /** Where the CV links point: `<CV_PUBLIC_URL>/<application id>/<file name>`. */
+        CV_PUBLIC_URL: z.url().default('https://cv.nick-lukashik.com'),
     })
+    .refine(
+        value =>
+            [
+                value.R2_ENDPOINT,
+                value.R2_ACCESS_KEY_ID,
+                value.R2_SECRET_ACCESS_KEY,
+            ].every(item => item === undefined)
+            || [
+                value.R2_ENDPOINT,
+                value.R2_ACCESS_KEY_ID,
+                value.R2_SECRET_ACCESS_KEY,
+            ].every(item => item !== undefined),
+        {
+            error: 'R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are set together or not at all',
+            path: [
+                'R2_ENDPOINT',
+            ],
+        },
+    )
 
 export type Env = z.output<typeof envSchema>
 

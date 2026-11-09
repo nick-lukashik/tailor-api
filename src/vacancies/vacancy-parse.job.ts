@@ -8,13 +8,16 @@ import { DB } from '../common/database/database.js'
 import { PG_BOSS } from '../common/jobs/jobs.module.js'
 import { Metrics } from '../common/metrics/metrics.js'
 import { llmConfig } from '../config/config.js'
-import type { ParseModel } from '../config/env.js'
+import type { PoolModelConfig } from '../config/env.js'
+import { CvGenerateJob } from '../cv-generation/cv-generate.job.js'
 import type { Db, Tx, VacancyRow } from '../db/types.js'
 import { LLM_CALL_TIMEOUT_MS, LlmGatewayClient } from '../llm/llm-gateway.client.js'
 import { LlmCallError } from '../llm/llm-gateway.js'
+import { afterFailure, assignQueues } from '../llm/model-pool.js'
+import { ModelPoolRepository } from '../llm/model-pool.repository.js'
 import { PARSE_PROMPT_VERSION, PARSE_SYSTEM_PROMPT, parseUserMessage } from './parse.prompt.js'
 import { parsedVacancySchema } from './parse.schemas.js'
-import { afterFailure, assignQueues, LEGACY_PARSE_QUEUE, parseQueueName } from './parse-pool.js'
+import { LEGACY_PARSE_QUEUE, parseQueueName } from './parse-pool.js'
 import { VacanciesRepository } from './vacancies.repository.js'
 
 /** Above one gateway call (its wait for a provider slot included) plus the reads and the write. */
@@ -28,7 +31,7 @@ const payloadSchema = z.object({
 
 type ParseResult = 'parsed' | 'failed' | 'retry' | 'moved' | 'skipped'
 
-type PoolModel = ParseModel & {
+type PoolModel = PoolModelConfig & {
     queue: string
 }
 
@@ -57,7 +60,9 @@ export class VacancyParseJob implements OnModuleInit, OnApplicationBootstrap {
         @Inject(PG_BOSS) private readonly boss: PgBoss,
         @Inject(DB) private readonly db: Db,
         private readonly repository: VacanciesRepository,
+        private readonly pools: ModelPoolRepository,
         private readonly llm: LlmGatewayClient,
+        private readonly cvs: CvGenerateJob,
         @Inject(llmConfig.KEY) config: ConfigType<typeof llmConfig>,
         metrics: Metrics,
     ) {
@@ -146,7 +151,8 @@ export class VacancyParseJob implements OnModuleInit, OnApplicationBootstrap {
         ].sort()
         await this.repository.lockForParse(tx, ids)
         const all = this.pool.map(model => model.queue)
-        const { load, live } = await this.repository.liveParseJobs(tx, all, ids)
+        const load = await this.pools.load(tx, all)
+        const live = await this.pools.live(tx, all, ids)
         const targets = move ? all.filter(queue => queue !== move.from.queue) : all
         const assigned = assignQueues(
             targets,
@@ -308,17 +314,21 @@ export class VacancyParseJob implements OnModuleInit, OnApplicationBootstrap {
             idempotencyKey: `vacancy-parse-${job.id}`,
             signal: job.signal,
         })
-        await this.repository.saveParsed(vacancy.id, {
-            parsed: {
-                ...output,
-                _meta: {
-                    model: model.model,
-                    effort: model.effort,
-                    promptVersion: PARSE_PROMPT_VERSION,
+        // The CVs of the applications that have none are queued with the parse, or neither is saved.
+        const cvs = await this.db.transaction(async tx => {
+            await this.repository.saveParsed(tx, vacancy.id, {
+                parsed: {
+                    ...output,
+                    _meta: {
+                        model: model.model,
+                        effort: model.effort,
+                        promptVersion: PARSE_PROMPT_VERSION,
+                    },
                 },
-            },
-            title: clip(output.title),
-            company: clip(output.company),
+                title: clip(output.title),
+                company: clip(output.company),
+            })
+            return this.cvs.requestFirstVersions(tx, vacancy.id)
         })
         this.logger.log(
             {
@@ -329,6 +339,7 @@ export class VacancyParseJob implements OnModuleInit, OnApplicationBootstrap {
                 promptVersion: PARSE_PROMPT_VERSION,
                 promptTokens,
                 completionTokens,
+                cvs,
                 ms: Math.round(performance.now() - startedAt),
             },
             'Vacancy parsed',

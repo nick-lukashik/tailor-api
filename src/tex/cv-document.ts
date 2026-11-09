@@ -88,3 +88,29 @@ export const cvTemplates = [
     'minimal-violet',
 ] as const
 export type CvTemplate = (typeof cvTemplates)[number]
+
+/**
+ * What tailor-tex `POST /api/v1/cv/measure` returns: a build without the PDF,
+ * for the fitting loop. A copy of its `cvMeasurementSchema`; read loosely, so
+ * a field it adds later does not break this side.
+ */
+export const cvMeasurementSchema = z.object({
+    pages: z.int().min(0),
+    /** Fill of each page's text area, 0 to 1. */
+    fill: z.array(z.number().min(0).max(1)),
+    sizeBytes: z.int().min(0),
+    /** pages <= maxPages. */
+    fits: z.boolean(),
+    /** Widest overfull hbox in points; 0 when none. */
+    overfullPt: z.number().min(0),
+    fontsOk: z.boolean(),
+    /** Printed lines of each block: `summary:<i>`, `skill:<i>`, `bullet:<bullet id>`; null when not found. */
+    blocks: z.array(
+        z.object({
+            id: z.string(),
+            lines: z.int().min(0).nullable(),
+        }),
+    ),
+    warnings: z.array(z.string()),
+})
+export type CvMeasurement = z.infer<typeof cvMeasurementSchema>

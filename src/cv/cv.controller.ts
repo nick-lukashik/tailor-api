@@ -39,10 +39,11 @@ export class CvController {
             res.redirect(302, file.fileName)
             return
         }
-        return new StreamableFile(file.content, {
+        const content = await file.open()
+        return new StreamableFile(content.body, {
             type: 'application/pdf',
             disposition: `inline; filename="${file.fileName}"`,
-            length: file.content.length,
+            length: content.length,
         })
     }
 }

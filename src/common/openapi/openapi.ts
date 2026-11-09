@@ -7,6 +7,7 @@ const descriptions: Record<number, string> = {
     401: 'No valid access token (UNAUTHORIZED)',
     403: 'The token lacks the tailor role (FORBIDDEN)',
     404: 'Not found (NOT_FOUND)',
+    409: 'Conflicts with the current state (CONFLICT)',
     413: 'Request body over 1 MiB (PAYLOAD_TOO_LARGE)',
     422: 'The profile does not make a CV: what is missing, a TeX error or too many pages (UNPROCESSABLE)',
     429: 'Rate limited (RATE_LIMITED)',
@@ -16,7 +17,7 @@ const descriptions: Record<number, string> = {
 }
 
 /** Documents the contract error body for the given statuses; 500, 503 and 504 apply to every route. */
-export const ApiErrors = (...statuses: (400 | 401 | 403 | 404 | 413 | 422 | 429)[]) =>
+export const ApiErrors = (...statuses: (400 | 401 | 403 | 404 | 409 | 413 | 422 | 429)[]) =>
     applyDecorators(
         ...[
             ...statuses,

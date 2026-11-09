@@ -1,13 +1,21 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
+import type { ConfigType } from '@nestjs/config'
 import { z } from 'zod'
 import { DB } from '../common/database/database.js'
 import { notFound } from '../common/http/app-error.js'
 import { cursorCodec } from '../common/http/cursor.js'
+import { cvConfig } from '../config/config.js'
 import type { Db } from '../db/types.js'
 import { parsedVacancySchema } from '../vacancies/parse.schemas.js'
-import { type ApplicationDetailView, ApplicationsRepository, type ApplicationView } from './applications.repository.js'
+import {
+    type ApplicationDetailView,
+    ApplicationsRepository,
+    type ApplicationView,
+    type CvVersions,
+} from './applications.repository.js'
 import {
     type Application,
+    type ApplicationCv,
     type ApplicationDetail,
     type ApplicationList,
     applicationsCursorSchema,
@@ -27,6 +35,7 @@ const toApplication = (row: ApplicationView): Application => ({
     status: row.status,
     vacancyId: row.vacancyId,
     parseStatus: row.parseStatus,
+    cvStatus: row.cvStatus ?? 'none',
     createdAt: row.createdAt.toISOString(),
 })
 
@@ -59,6 +68,7 @@ export class ApplicationsService {
     constructor(
         @Inject(DB) private readonly db: Db,
         private readonly repository: ApplicationsRepository,
+        @Inject(cvConfig.KEY) private readonly cv: ConfigType<typeof cvConfig>,
     ) {}
 
     /** A transaction even for one insert: follow-ups (an outbox event, a job) join it. */
@@ -74,17 +84,47 @@ export class ApplicationsService {
         return {
             ...toApplication(row),
             vacancy: this.toVacancy(row),
-            cv: {
-                status: 'none',
-            },
+            cv: this.toCv(row.id, await this.repository.cvVersions(row.id)),
         }
     }
 
-    /** A demo row (no person) by its id, for the public CV link; any other application is a 404. */
-    async getDemoForCv(id: string): Promise<Application> {
+    /** The newest version's status, model and error; the link and pages of the newest ready one. */
+    private toCv(applicationId: string, { latest, ready }: CvVersions): ApplicationCv {
+        if (!latest)
+            return {
+                status: 'none',
+            }
+        return {
+            status: latest.status,
+            version: latest.version,
+            ...(ready?.fileName
+                ? {
+                      url: `${this.cv.publicUrl}/${applicationId}/${ready.fileName}`,
+                  }
+                : {}),
+            ...(ready?.pages
+                ? {
+                      pages: ready.pages,
+                  }
+                : {}),
+            ...(latest.model
+                ? {
+                      model: latest.model,
+                  }
+                : {}),
+            ...(latest.error
+                ? {
+                      error: latest.error,
+                  }
+                : {}),
+            updatedAt: latest.updatedAt.toISOString(),
+        }
+    }
+
+    /** A demo row (no person) by its id, for the public CV link; undefined for any other application. */
+    async findDemoForCv(id: string): Promise<Application | undefined> {
         const row = uuid.safeParse(id).success ? await this.repository.findDemo(id) : undefined
-        if (!row) throw notFound('CV')
-        return toApplication(row)
+        return row && toApplication(row)
     }
 
     private toVacancy(row: ApplicationDetailView): ApplicationDetail['vacancy'] {

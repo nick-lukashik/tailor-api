@@ -105,71 +105,6 @@ export class VacanciesRepository {
             .for('update')
     }
 
-    /**
-     * Live (queued or active) parse jobs, read from pg-boss's own table: the
-     * count per queue, and the queue of each vacancy that has one (a queued job
-     * before an active one). pg-boss's queue stats are refreshed by its monitor,
-     * too stale to balance a burst on.
-     */
-    async liveParseJobs(
-        tx: Tx,
-        queues: string[],
-        vacancyIds: string[],
-    ): Promise<{
-        load: Map<string, number>
-        live: Map<
-            string,
-            {
-                queue: string
-                queued: boolean
-            }
-        >
-    }> {
-        const names = sql.param(queues)
-        const counts = await tx.execute<{
-            name: string
-            count: number
-        }>(sql`
-            select name, count(*)::int as count from pgboss.job
-            where name = any(${names}::text[]) and state < 'completed'
-            group by name
-        `)
-        const keys =
-            vacancyIds.length === 0
-                ? {
-                      rows: [],
-                  }
-                : await tx.execute<{
-                      key: string
-                      name: string
-                      queued: boolean
-                  }>(sql`
-                      select distinct on (singleton_key) singleton_key as key, name, state < 'active' as queued
-                      from pgboss.job
-                      where name = any(${names}::text[])
-                        and singleton_key = any(${sql.param(vacancyIds)}::text[])
-                        and state < 'completed'
-                      order by singleton_key, state
-                  `)
-        return {
-            load: new Map(
-                counts.rows.map(row => [
-                    row.name,
-                    row.count,
-                ]),
-            ),
-            live: new Map(
-                keys.rows.map(row => [
-                    row.key,
-                    {
-                        queue: row.name,
-                        queued: row.queued,
-                    },
-                ]),
-            ),
-        }
-    }
-
     async findById(id: string): Promise<VacancyRow | undefined> {
         const [row] = await this.db.select().from(vacancies).where(eq(vacancies.id, id)).limit(1)
         return row
@@ -187,10 +122,11 @@ export class VacanciesRepository {
     }
 
     /**
-     * The parse result, and in the same transaction the company and role of
-     * every application on the vacancy that still has them empty.
+     * The parse result, and in the caller's transaction the company and role
+     * of every application on the vacancy that still has them empty.
      */
     async saveParsed(
+        tx: Tx,
         id: string,
         result: {
             parsed: unknown
@@ -198,42 +134,40 @@ export class VacanciesRepository {
             company: string
         },
     ) {
-        await this.db.transaction(async tx => {
-            const [row] = await tx
-                .update(vacancies)
-                .set({
-                    parsed: result.parsed,
-                    title: result.title,
-                    company: result.company,
-                    parseStatus: 'parsed',
-                    parseError: null,
-                    updatedAt: sql`now()`,
-                })
-                .where(eq(vacancies.id, id))
-                .returning({
-                    id: vacancies.id,
-                })
-            const empty = [
-                ...(result.company
-                    ? [
-                          eq(applications.company, ''),
-                      ]
-                    : []),
-                ...(result.title
-                    ? [
-                          eq(applications.role, ''),
-                      ]
-                    : []),
-            ]
-            if (!row || empty.length === 0) return
-            await tx
-                .update(applications)
-                .set({
-                    company: sql`case when ${applications.company} = '' then ${result.company} else ${applications.company} end`,
-                    role: sql`case when ${applications.role} = '' then ${result.title} else ${applications.role} end`,
-                })
-                .where(and(eq(applications.vacancyId, id), or(...empty)))
-        })
+        const [row] = await tx
+            .update(vacancies)
+            .set({
+                parsed: result.parsed,
+                title: result.title,
+                company: result.company,
+                parseStatus: 'parsed',
+                parseError: null,
+                updatedAt: sql`now()`,
+            })
+            .where(eq(vacancies.id, id))
+            .returning({
+                id: vacancies.id,
+            })
+        const empty = [
+            ...(result.company
+                ? [
+                      eq(applications.company, ''),
+                  ]
+                : []),
+            ...(result.title
+                ? [
+                      eq(applications.role, ''),
+                  ]
+                : []),
+        ]
+        if (!row || empty.length === 0) return
+        await tx
+            .update(applications)
+            .set({
+                company: sql`case when ${applications.company} = '' then ${result.company} else ${applications.company} end`,
+                role: sql`case when ${applications.role} = '' then ${result.title} else ${applications.role} end`,
+            })
+            .where(and(eq(applications.vacancyId, id), or(...empty)))
     }
 
     /** A vacancy pasted as text only: nothing to find it by, so always a new row. */

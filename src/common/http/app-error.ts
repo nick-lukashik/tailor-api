@@ -8,6 +8,8 @@ export const errorStatus = {
     /** A valid token without what the route needs: the `tailor` role, or a permission. */
     FORBIDDEN: 403,
     NOT_FOUND: 404,
+    /** A state that forbids the change: a CV asked for before its vacancy is parsed, or while one is being made. */
+    CONFLICT: 409,
     PAYLOAD_TOO_LARGE: 413,
     /** Valid input that cannot be built: the profile does not make a CV (TeX failed, too many pages). */
     UNPROCESSABLE: 422,
