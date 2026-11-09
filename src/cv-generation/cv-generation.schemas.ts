@@ -40,8 +40,13 @@ export const analysisAnswerSchema = z.strictObject({
 })
 export type AnalysisAnswer = z.output<typeof analysisAnswerSchema>
 
-/** Step 2: the chosen cases rewritten, the summary adapted, the skill rows ordered and spelled as the vacancy does. */
+/**
+ * Step 2: the CV's English title, the chosen cases rewritten, the summary
+ * adapted, the skill rows ordered and spelled as the vacancy does, and the
+ * vacancy's skills read in English with their rows.
+ */
 export const compositionAnswerSchema = z.strictObject({
+    title: z.string(),
     summary: z.array(
         z.strictObject({
             id: z.string(),
@@ -66,6 +71,15 @@ export const compositionAnswerSchema = z.strictObject({
         z.strictObject({
             label: z.string(),
             items: z.array(z.string()),
+        }),
+    ),
+    vacancySkills: z.array(
+        z.strictObject({
+            /** As the vacancy's skills list has it. */
+            name: z.string(),
+            english: z.string(),
+            /** The label of the row it went into; empty when it is no technology or practice. */
+            row: z.string(),
         }),
     ),
 })

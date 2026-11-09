@@ -1,5 +1,6 @@
 import { caseCategories, type ProfileDocument } from '../profile/profile.schemas.js'
 import type { AnalysisAnswer, RequirementImportance } from './cv-generation.schemas.js'
+import { matchingStack } from './skills.js'
 
 /*
  * The analysis step, ported from Work Finder (resume/domain: references,
@@ -241,6 +242,18 @@ export function scoreCase(
     return 0.6 * categoryFit + 0.4 * evidenceFit
 }
 
+/** Points a case gains for listing the vacancy's main stack: 5 per technology, at most 10. */
+const STACK_POINTS = 5
+const STACK_BONUS_MAX = 10
+
+/** The technologies of the requirements that are the work itself (must and responsibility). */
+export const mainStack = (requirements: Requirement[]) =>
+    requirements.filter(item => item.importance !== 'preferred').flatMap(item => item.technologies)
+
+/** The bonus of a case whose technologies match the vacancy's main stack. */
+export const stackBonus = (item: ProfileCase, stack: string[]) =>
+    Math.min(STACK_BONUS_MAX, STACK_POINTS * matchingStack(item.technologies, stack).length)
+
 export type Quota = {
     min: number
     target: number
@@ -274,7 +287,8 @@ export const tailoredEmployments = (profile: ProfileDocument, aiRole: boolean) =
 
 /**
  * Per employment: its quota (the AI one for an AI role, the general one
- * otherwise; every eligible case without a quota), its cases ranked by score,
+ * otherwise; every eligible case without a quota), its cases ranked by score
+ * (plus the bonus for the vacancy's main stack),
  * and the code's suggestion the composition may revise.
  */
 export function planEmployments(profile: ProfileDocument, title: string, analysis: Analysis): EmploymentPlan[] {
@@ -284,6 +298,7 @@ export function planEmployments(profile: ProfileDocument, title: string, analysi
         requirement.text,
         ...requirement.technologies,
     ])
+    const stack = mainStack(analysis.requirements)
     const usedGroups = new Set<string>()
     return tailoredEmployments(profile, analysis.aiRole).map(employment => {
         const room = Math.max(0, BULLETS_MAX - employment.fixedBullets.length)
@@ -292,7 +307,7 @@ export function planEmployments(profile: ProfileDocument, title: string, analysi
             .map((item, index) => ({
                 item,
                 index,
-                score: scoreCase(item, analysis, weights),
+                score: scoreCase(item, analysis, weights) + stackBonus(item, stack),
             }))
             .sort((a, b) => b.score - a.score || a.index - b.index)
             .map(({ item, score }) => ({

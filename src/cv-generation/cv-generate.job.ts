@@ -296,6 +296,7 @@ export class CvGenerateJob implements OnModuleInit, OnApplicationBootstrap {
                     builds: cv.builds,
                     nearMiss: cv.nearMiss,
                     sourcedBullets: cv.sourcedBullets,
+                    unchangedBullets: cv.unchangedBullets,
                     ms: Math.round(performance.now() - startedAt),
                 },
                 'CV ready',

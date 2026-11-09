@@ -238,4 +238,44 @@ describe('the analysis', () => {
         )
         expect(named[0]?.suggested).toContain('c1')
     })
+
+    it("ranks a case listing the vacancy's main stack above an equal one that does not", () => {
+        const profile = aiProfile()
+        profile.cases = [
+            exampleCase('n1', 'acme', {
+                technologies: [
+                    'Node.js',
+                ],
+            }),
+            exampleCase('p1', 'acme', {
+                technologies: [
+                    'Python (FastAPI)',
+                ],
+            }),
+        ]
+        const [acme] = planEmployments(
+            profile,
+            'Backend Engineer',
+            analysis(false, {
+                requirements: [
+                    {
+                        id: 'R1',
+                        text: 'Python and FastAPI',
+                        importance: 'must',
+                        categories: [
+                            'BE',
+                        ],
+                        technologies: [
+                            'Python',
+                            'FastAPI',
+                        ],
+                    },
+                ],
+            }),
+        )
+        expect(acme?.ranked.map(entry => entry.item.id)).toEqual([
+            'p1',
+            'n1',
+        ])
+    })
 })
