@@ -14,6 +14,7 @@ import { CvModule } from './cv/cv.module.js'
 import { CvGenerationModule } from './cv-generation/cv-generation.module.js'
 import * as schema from './db/schema.js'
 import { MasterCvModule } from './master-cv/master-cv.module.js'
+import { MaterialsModule } from './materials/materials.module.js'
 import { ProfileModule } from './profile/profile.module.js'
 import { StorageModule } from './storage/storage.module.js'
 import { VacanciesModule } from './vacancies/vacancies.module.js'
@@ -77,10 +78,11 @@ type App = ConfigType<typeof appConfig>
             useFactory: (db: ConfigType<typeof dbConfig>, app: App, llm: ConfigType<typeof llmConfig>) => ({
                 connectionString: db.url,
                 applicationName: `${app.service}-jobs`,
-                // Above the parse and CV jobs running at once (each model's concurrency), the legacy drain and sends.
+                // Above the parse, CV and materials jobs running at once (each model's concurrency), the legacy drain and sends.
                 max: [
                     ...llm.parseModels,
                     ...llm.cvModels,
+                    ...llm.lettersModels,
                 ].reduce((sum, model) => sum + model.concurrency, 3),
             }),
         }),
@@ -100,6 +102,7 @@ type App = ConfigType<typeof appConfig>
         CvGenerationModule,
         ProfileModule,
         MasterCvModule,
+        MaterialsModule,
         StorageModule,
         VacanciesModule,
     ],

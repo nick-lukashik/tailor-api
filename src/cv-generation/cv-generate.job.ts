@@ -15,6 +15,7 @@ import { LLM_CALL_TIMEOUT_MS } from '../llm/llm-gateway.client.js'
 import { LlmCallError } from '../llm/llm-gateway.js'
 import { afterFailure, assignQueues, poolQueueName } from '../llm/model-pool.js'
 import { ModelPoolRepository } from '../llm/model-pool.repository.js'
+import { MaterialsGenerateJob } from '../materials/materials-generate.job.js'
 import { ProfileService } from '../profile/profile.service.js'
 import { ObjectStorage } from '../storage/object-storage.js'
 import { TailorTexClient, TEX_RENDER_TIMEOUT_MS } from '../tex/tailor-tex.client.js'
@@ -54,7 +55,8 @@ type PoolModel = PoolModelConfig & {
  * (CvGenerator) and the version becomes `ready` with its PDF in R2, or
  * `failed` with a short code. One queue per model, the emptiest at send; a
  * provider out of quota or down moves the job to another model once; tailor-tex
- * or R2 down and other retryable failures back off on the same queue.
+ * or R2 down and other retryable failures back off on the same queue. A ready
+ * version queues the materials written from it (`materials.generate`).
  */
 @Injectable()
 export class CvGenerateJob implements OnModuleInit, OnApplicationBootstrap {
@@ -71,6 +73,7 @@ export class CvGenerateJob implements OnModuleInit, OnApplicationBootstrap {
         private readonly profiles: ProfileService,
         private readonly storage: ObjectStorage,
         private readonly tex: TailorTexClient,
+        private readonly materials: MaterialsGenerateJob,
         @Inject(llmConfig.KEY) config: ConfigType<typeof llmConfig>,
         metrics: Metrics,
     ) {
@@ -277,11 +280,15 @@ export class CvGenerateJob implements OnModuleInit, OnApplicationBootstrap {
                         profileVersion: profile.version,
                     }),
             })
-            await this.repository.markReady(cvId, {
-                fileKey: cv.fileKey,
-                fileName: cv.fileName,
-                pages: cv.pages,
-                document: cv.document,
+            // The version and the materials written from it, in one transaction.
+            await this.db.transaction(async tx => {
+                await this.repository.markReady(tx, cvId, {
+                    fileKey: cv.fileKey,
+                    fileName: cv.fileName,
+                    pages: cv.pages,
+                    document: cv.document,
+                })
+                await this.materials.requestForCv(tx, applicationId, cvId)
             })
             this.logger.log(
                 {

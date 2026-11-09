@@ -43,6 +43,13 @@
       "when": 1794200927630,
       "tag": "0005_cvs",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794211500065,
+      "tag": "0006_materials",
+      "breakpoints": true
     }
   ]
 }

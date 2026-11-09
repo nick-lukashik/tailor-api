@@ -37,6 +37,7 @@ export const llmConfig = registerAs('llm', () => ({
     key: env().LLM_GATEWAY_KEY,
     parseModels: env().LLM_PARSE_MODELS,
     cvModels: env().LLM_CV_MODELS,
+    lettersModels: env().LLM_LETTERS_MODELS,
 }))
 
 export const storageConfig = registerAs('storage', () => ({

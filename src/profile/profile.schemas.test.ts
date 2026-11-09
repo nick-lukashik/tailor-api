@@ -40,6 +40,7 @@ describe('profile document', () => {
                 cvShowPhone: true,
                 promptAdditions: {
                     cv: '',
+                    letters: '',
                 },
             },
         })
@@ -52,6 +53,7 @@ describe('profile document', () => {
         })
         expect(parsed.promptAdditions).toEqual({
             cv: '',
+            letters: '',
         })
         expect(
             settingsSchema.safeParse({

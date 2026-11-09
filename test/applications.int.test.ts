@@ -70,6 +70,7 @@ describe('applications', () => {
             vacancyId: null,
             parseStatus: null,
             cvStatus: 'none',
+            materialsStatus: 'none',
             createdAt: expect.any(String),
         })
         expect(new Date(res.body.createdAt).toISOString()).toBe(res.body.createdAt)
@@ -83,6 +84,9 @@ describe('applications', () => {
             ...application,
             vacancy: null,
             cv: {
+                status: 'none',
+            },
+            materials: {
                 status: 'none',
             },
         })

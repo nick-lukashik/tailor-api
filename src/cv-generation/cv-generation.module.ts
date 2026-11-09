@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { LlmModule } from '../llm/llm.module.js'
+import { MaterialsModule } from '../materials/materials.module.js'
 import { ProfileModule } from '../profile/profile.module.js'
 import { StorageModule } from '../storage/storage.module.js'
 import { TexModule } from '../tex/tex.module.js'
@@ -17,6 +18,7 @@ import { CvsRepository } from './cvs.repository.js'
 @Module({
     imports: [
         LlmModule,
+        MaterialsModule,
         ProfileModule,
         StorageModule,
         TexModule,

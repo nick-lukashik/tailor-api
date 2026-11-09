@@ -79,6 +79,8 @@ export const envSchema = baseEnvSchema
         }),
         LLM_PARSE_MODELS: modelPool('claude-sonnet-5-5:low:3,gpt-6.1-sol:low:3'),
         LLM_CV_MODELS: modelPool('claude-sonnet-5-5:low:3,gpt-6.1-sol:low:3'),
+        /** The models that write the materials for applying by hand (cover letter, messages). */
+        LLM_LETTERS_MODELS: modelPool('claude-sonnet-5-5:low:3,gpt-6.1-sol:low:3'),
         /**
          * Cloudflare R2 (S3 API) for the CV files: the account endpoint and an
          * API token's key pair, all three or none. Unset: the service starts,

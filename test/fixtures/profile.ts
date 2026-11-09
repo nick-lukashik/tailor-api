@@ -272,6 +272,7 @@ export const exampleProfile = () => ({
         cvShowPhone: true,
         promptAdditions: {
             cv: 'Prefer measurable results.',
+            letters: 'End every text with a question.',
         },
     },
 })
