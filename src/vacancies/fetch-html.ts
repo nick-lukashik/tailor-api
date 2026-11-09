@@ -66,6 +66,17 @@ function inner(html: string, tag: string): string | undefined {
     return html.slice(open.index + open[0].length, close)
 }
 
+/** Every tag removed, repeated until nothing changes, so nested fragments (`<scr<b>ipt>`) cannot rebuild one; a stray `<` or `>` left over is dropped. */
+function stripTags(html: string): string {
+    let text = html
+    let previous: string
+    do {
+        previous = text
+        text = text.replace(/<[^<>]*>/g, '')
+    } while (text !== previous)
+    return text.replace(/[<>]/g, '')
+}
+
 function flatten(html: string): string {
     const text = html
         .replace(/<br\s*\/?>/gi, '\n')
@@ -73,8 +84,7 @@ function flatten(html: string): string {
         .replace(/<li\b[^>]*>/gi, '\n- ')
         .replace(/<\/(td|th)\s*>/gi, ' ')
         .replace(BLOCK, '\n')
-        .replace(/<[^>]*>/g, '')
-    return decodeEntities(text)
+    return decodeEntities(stripTags(text))
         .replace(/\r\n?/g, '\n')
         .replace(/[ \t\f\v ]+/g, ' ')
         .split('\n')

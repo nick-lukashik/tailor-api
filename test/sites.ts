@@ -17,7 +17,8 @@ export async function startSites() {
     const server: Server = createServer((request, response) => {
         const path = request.url ?? '/'
         requests.push(path)
-        const reply = routes.get(path)?.() ?? {
+        const route = routes.get(path)
+        const reply = (typeof route === 'function' ? route() : undefined) ?? {
             status: 404,
             contentType: 'text/plain',
             body: 'not found',
