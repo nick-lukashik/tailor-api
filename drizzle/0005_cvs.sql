@@ -1,0 +1,30 @@
+CREATE TABLE "cvs" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"application_id" uuid NOT NULL,
+	"version" integer NOT NULL,
+	"status" text DEFAULT 'queued' NOT NULL,
+	"file_key" text,
+	"file_name" text,
+	"role" text DEFAULT '' NOT NULL,
+	"model" text,
+	"effort" text,
+	"prompt_version" integer,
+	"profile_version" integer,
+	"pages" integer,
+	"ai_role" boolean,
+	"error" text,
+	"analysis" jsonb,
+	"document" jsonb,
+	"created_at" timestamp (3) with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp (3) with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "cvs_application_id_version_key" UNIQUE("application_id","version"),
+	CONSTRAINT "cvs_version" CHECK ("cvs"."version" >= 1),
+	CONSTRAINT "cvs_status" CHECK ("cvs"."status" in ('queued', 'generating', 'ready', 'failed')),
+	CONSTRAINT "cvs_file_name_length" CHECK (char_length("cvs"."file_name") <= 120),
+	CONSTRAINT "cvs_file_key_length" CHECK (char_length("cvs"."file_key") <= 300),
+	CONSTRAINT "cvs_role_length" CHECK (char_length("cvs"."role") <= 200),
+	CONSTRAINT "cvs_error_length" CHECK (char_length("cvs"."error") <= 100),
+	CONSTRAINT "cvs_ready_file" CHECK ("cvs"."status" <> 'ready' or ("cvs"."file_key" is not null and "cvs"."file_name" is not null))
+);
+--> statement-breakpoint
+ALTER TABLE "cvs" ADD CONSTRAINT "cvs_application_id_applications_id_fk" FOREIGN KEY ("application_id") REFERENCES "public"."applications"("id") ON DELETE restrict ON UPDATE no action;

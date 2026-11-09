@@ -9,3 +9,4 @@ export type Tx = TxOf<Db>
 export type ApplicationRow = typeof schema.applications.$inferSelect
 export type VacancyRow = typeof schema.vacancies.$inferSelect
 export type ProfileRow = typeof schema.profiles.$inferSelect
+export type CvRow = typeof schema.cvs.$inferSelect

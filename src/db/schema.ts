@@ -1,5 +1,17 @@
 import { sql } from 'drizzle-orm'
-import { check, index, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import {
+    boolean,
+    check,
+    index,
+    integer,
+    jsonb,
+    pgTable,
+    text,
+    timestamp,
+    unique,
+    uniqueIndex,
+    uuid,
+} from 'drizzle-orm/pg-core'
 import type { ProfileDocument } from '../profile/profile.schemas.js'
 
 /** Millisecond precision, so an ISO string from JSON round-trips exactly (cursors). */
@@ -101,6 +113,74 @@ export const applications = pgTable(
         check('applications_vacancy_url_length', sql`char_length(${t.vacancyUrl}) <= 2048`),
         check('applications_vacancy_text_length', sql`char_length(${t.vacancyText}) <= 50000`),
         check('applications_status', sql`${t.status} in ('new', 'sent', 'interview', 'offer', 'rejected')`),
+    ],
+)
+
+/** Where the generation of a CV version is: queued, then generating, then ready or failed. */
+export const cvStatuses = [
+    'queued',
+    'generating',
+    'ready',
+    'failed',
+] as const
+
+/**
+ * A CV of an application, tailored to its vacancy (src/cv-generation): versions
+ * 1, 2, … per application, each generated once by the `cv.generate` job and
+ * never changed after. The link `cv.<domain>/<application id>/<file name>`
+ * serves the newest `ready` one.
+ */
+export const cvs = pgTable(
+    'cvs',
+    {
+        id: uuid('id').primaryKey().default(sql`uuidv7()`),
+        applicationId: uuid('application_id')
+            .notNull()
+            .references(() => applications.id, {
+                onDelete: 'restrict',
+            }),
+        version: integer('version').notNull(),
+        status: text('status', {
+            enum: cvStatuses,
+        })
+            .notNull()
+            .default('queued'),
+        /** The PDF in R2 (`<R2_PREFIX>cv/<application id>/<cv id>.pdf`); null until ready. */
+        fileKey: text('file_key'),
+        /** `Nick-Lukashik-<Role>-CV.pdf`; null until ready. */
+        fileName: text('file_name'),
+        /** The vacancy title the CV is headed with. */
+        role: text('role').notNull().default(''),
+        /** The model of the pool that generates it, and its effort. */
+        model: text('model'),
+        effort: text('effort'),
+        promptVersion: integer('prompt_version'),
+        /** The profile version it was built from (profile_snapshots). */
+        profileVersion: integer('profile_version'),
+        pages: integer('pages'),
+        /** D-115: the vacancy is an applied-AI, LLM or forward-deployed role, so AI-only parts are in. */
+        aiRole: boolean('ai_role'),
+        /** A short code when failed: `llm_bad_request`, `storage_not_configured`, … */
+        error: text('error'),
+        /** The analysis of the vacancy against the case bank, for debugging. */
+        analysis: jsonb('analysis').$type<unknown>(),
+        /** The CvDocument the PDF was built from, for debugging and regeneration. */
+        document: jsonb('document').$type<unknown>(),
+        createdAt: at('created_at').notNull().defaultNow(),
+        updatedAt: at('updated_at').notNull().defaultNow(),
+    },
+    t => [
+        unique('cvs_application_id_version_key').on(t.applicationId, t.version),
+        check('cvs_version', sql`${t.version} >= 1`),
+        check('cvs_status', sql`${t.status} in ('queued', 'generating', 'ready', 'failed')`),
+        check('cvs_file_name_length', sql`char_length(${t.fileName}) <= 120`),
+        check('cvs_file_key_length', sql`char_length(${t.fileKey}) <= 300`),
+        check('cvs_role_length', sql`char_length(${t.role}) <= 200`),
+        check('cvs_error_length', sql`char_length(${t.error}) <= 100`),
+        check(
+            'cvs_ready_file',
+            sql`${t.status} <> 'ready' or (${t.fileKey} is not null and ${t.fileName} is not null)`,
+        ),
     ],
 )
 
