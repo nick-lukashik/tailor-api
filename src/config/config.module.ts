@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
-import { appConfig, authConfig, dbConfig, llmConfig, storageConfig, texConfig } from './config.js'
+import { appConfig, authConfig, cvConfig, dbConfig, llmConfig, storageConfig, texConfig } from './config.js'
 import { envSchema } from './env.js'
 
 /**
@@ -23,6 +23,7 @@ import { envSchema } from './env.js'
                 texConfig,
                 llmConfig,
                 storageConfig,
+                cvConfig,
             ],
         }),
     ],

@@ -52,6 +52,7 @@ describe('health, OpenAPI, metrics', () => {
                 '/api/v1/profile/schema',
                 '/api/v1/vacancies/intake',
                 '/api/v1/vacancies/{id}/parse',
+                '/api/v1/applications/{id}/cv',
             ]),
         )
         expect(res.body.components.schemas.Application.required).toEqual([
@@ -63,6 +64,7 @@ describe('health, OpenAPI, metrics', () => {
             'status',
             'vacancyId',
             'parseStatus',
+            'cvStatus',
             'createdAt',
         ])
         expect(res.body.paths['/api/v1/vacancies/intake'].post.requestBody.content['application/json'].schema).toEqual({

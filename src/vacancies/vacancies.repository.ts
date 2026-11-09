@@ -122,10 +122,11 @@ export class VacanciesRepository {
     }
 
     /**
-     * The parse result, and in the same transaction the company and role of
-     * every application on the vacancy that still has them empty.
+     * The parse result, and in the caller's transaction the company and role
+     * of every application on the vacancy that still has them empty.
      */
     async saveParsed(
+        tx: Tx,
         id: string,
         result: {
             parsed: unknown
@@ -133,42 +134,40 @@ export class VacanciesRepository {
             company: string
         },
     ) {
-        await this.db.transaction(async tx => {
-            const [row] = await tx
-                .update(vacancies)
-                .set({
-                    parsed: result.parsed,
-                    title: result.title,
-                    company: result.company,
-                    parseStatus: 'parsed',
-                    parseError: null,
-                    updatedAt: sql`now()`,
-                })
-                .where(eq(vacancies.id, id))
-                .returning({
-                    id: vacancies.id,
-                })
-            const empty = [
-                ...(result.company
-                    ? [
-                          eq(applications.company, ''),
-                      ]
-                    : []),
-                ...(result.title
-                    ? [
-                          eq(applications.role, ''),
-                      ]
-                    : []),
-            ]
-            if (!row || empty.length === 0) return
-            await tx
-                .update(applications)
-                .set({
-                    company: sql`case when ${applications.company} = '' then ${result.company} else ${applications.company} end`,
-                    role: sql`case when ${applications.role} = '' then ${result.title} else ${applications.role} end`,
-                })
-                .where(and(eq(applications.vacancyId, id), or(...empty)))
-        })
+        const [row] = await tx
+            .update(vacancies)
+            .set({
+                parsed: result.parsed,
+                title: result.title,
+                company: result.company,
+                parseStatus: 'parsed',
+                parseError: null,
+                updatedAt: sql`now()`,
+            })
+            .where(eq(vacancies.id, id))
+            .returning({
+                id: vacancies.id,
+            })
+        const empty = [
+            ...(result.company
+                ? [
+                      eq(applications.company, ''),
+                  ]
+                : []),
+            ...(result.title
+                ? [
+                      eq(applications.role, ''),
+                  ]
+                : []),
+        ]
+        if (!row || empty.length === 0) return
+        await tx
+            .update(applications)
+            .set({
+                company: sql`case when ${applications.company} = '' then ${result.company} else ${applications.company} end`,
+                role: sql`case when ${applications.role} = '' then ${result.title} else ${applications.role} end`,
+            })
+            .where(and(eq(applications.vacancyId, id), or(...empty)))
     }
 
     /** A vacancy pasted as text only: nothing to find it by, so always a new row. */

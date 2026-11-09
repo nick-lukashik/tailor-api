@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { applicationStatuses, vacancyParseStatuses } from '../db/schema.js'
+import { applicationStatuses, cvStatuses, vacancyParseStatuses } from '../db/schema.js'
 import { parsedVacancySchema } from '../vacancies/parse.schemas.js'
 
 /** The API contract of `applications`; OpenAPI is generated from these schemas. */
@@ -15,6 +15,11 @@ export const applicationSchema = z
         vacancyId: z.uuid().nullable(),
         /** The vacancy's parsing; null without a vacancy. */
         parseStatus: z.enum(vacancyParseStatuses).nullable(),
+        /** The status of its newest CV version; `none` before the first. */
+        cvStatus: z.enum([
+            'none',
+            ...cvStatuses,
+        ]),
         createdAt: z.iso.datetime(),
     })
     .meta({
@@ -45,16 +50,33 @@ export const applicationVacancySchema = z
     })
 export type ApplicationVacancy = z.infer<typeof applicationVacancySchema>
 
-// Stage 4 adds `generating` and `ready` (with the file's url) as a discriminated union on `status`.
+/**
+ * The CV of an application: its newest version's status, and the link once a
+ * version is ready (it serves the newest ready one, so it stays while a newer
+ * one is made).
+ */
 export const applicationCvSchema = z
     .object({
         status: z.enum([
             'none',
+            ...cvStatuses,
         ]),
+        /** The newest version: 1, 2, … */
+        version: z.number().int().min(1).optional(),
+        /** `https://cv.<domain>/<application id>/<file name>`, once a version is ready. */
+        url: z.string().optional(),
+        /** Pages of the version the link serves. */
+        pages: z.number().int().min(1).optional(),
+        /** The model that generates or generated the newest version. */
+        model: z.string().optional(),
+        /** A short code when the newest version failed: `llm_bad_request`, `cv_does_not_fit`, … */
+        error: z.string().optional(),
+        updatedAt: z.iso.datetime().optional(),
     })
     .meta({
         id: 'ApplicationCv',
     })
+export type ApplicationCv = z.infer<typeof applicationCvSchema>
 
 /** One application with its vacancy and CV (GET /applications/:id); the list stays light. */
 export const applicationDetailSchema = applicationSchema

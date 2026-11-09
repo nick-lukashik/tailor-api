@@ -36,6 +36,7 @@ export const llmConfig = registerAs('llm', () => ({
     url: env().LLM_GATEWAY_URL.replace(/\/+$/, ''),
     key: env().LLM_GATEWAY_KEY,
     parseModels: env().LLM_PARSE_MODELS,
+    cvModels: env().LLM_CV_MODELS,
 }))
 
 export const storageConfig = registerAs('storage', () => ({
@@ -44,4 +45,8 @@ export const storageConfig = registerAs('storage', () => ({
     secretAccessKey: env().R2_SECRET_ACCESS_KEY,
     bucket: env().R2_BUCKET,
     prefix: env().R2_PREFIX,
+}))
+
+export const cvConfig = registerAs('cv', () => ({
+    publicUrl: env().CV_PUBLIC_URL.replace(/\/+$/, ''),
 }))

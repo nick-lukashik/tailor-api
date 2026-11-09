@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common'
+import { CvGenerationModule } from '../cv-generation/cv-generation.module.js'
 import { LlmModule } from '../llm/llm.module.js'
 import { VacanciesController } from './vacancies.controller.js'
 import { VacanciesRepository } from './vacancies.repository.js'
@@ -12,6 +13,7 @@ import { VacancyParseJob } from './vacancy-parse.job.js'
  */
 @Module({
     imports: [
+        CvGenerationModule,
         LlmModule,
     ],
     controllers: [

@@ -9,6 +9,7 @@ import { PG_BOSS } from '../common/jobs/jobs.module.js'
 import { Metrics } from '../common/metrics/metrics.js'
 import { llmConfig } from '../config/config.js'
 import type { PoolModelConfig } from '../config/env.js'
+import { CvGenerateJob } from '../cv-generation/cv-generate.job.js'
 import type { Db, Tx, VacancyRow } from '../db/types.js'
 import { LLM_CALL_TIMEOUT_MS, LlmGatewayClient } from '../llm/llm-gateway.client.js'
 import { LlmCallError } from '../llm/llm-gateway.js'
@@ -61,6 +62,7 @@ export class VacancyParseJob implements OnModuleInit, OnApplicationBootstrap {
         private readonly repository: VacanciesRepository,
         private readonly pools: ModelPoolRepository,
         private readonly llm: LlmGatewayClient,
+        private readonly cvs: CvGenerateJob,
         @Inject(llmConfig.KEY) config: ConfigType<typeof llmConfig>,
         metrics: Metrics,
     ) {
@@ -312,17 +314,21 @@ export class VacancyParseJob implements OnModuleInit, OnApplicationBootstrap {
             idempotencyKey: `vacancy-parse-${job.id}`,
             signal: job.signal,
         })
-        await this.repository.saveParsed(vacancy.id, {
-            parsed: {
-                ...output,
-                _meta: {
-                    model: model.model,
-                    effort: model.effort,
-                    promptVersion: PARSE_PROMPT_VERSION,
+        // The CVs of the applications that have none are queued with the parse, or neither is saved.
+        const cvs = await this.db.transaction(async tx => {
+            await this.repository.saveParsed(tx, vacancy.id, {
+                parsed: {
+                    ...output,
+                    _meta: {
+                        model: model.model,
+                        effort: model.effort,
+                        promptVersion: PARSE_PROMPT_VERSION,
+                    },
                 },
-            },
-            title: clip(output.title),
-            company: clip(output.company),
+                title: clip(output.title),
+                company: clip(output.company),
+            })
+            return this.cvs.requestFirstVersions(tx, vacancy.id)
         })
         this.logger.log(
             {
@@ -333,6 +339,7 @@ export class VacancyParseJob implements OnModuleInit, OnApplicationBootstrap {
                 promptVersion: PARSE_PROMPT_VERSION,
                 promptTokens,
                 completionTokens,
+                cvs,
                 ms: Math.round(performance.now() - startedAt),
             },
             'Vacancy parsed',

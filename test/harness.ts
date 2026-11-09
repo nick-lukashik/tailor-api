@@ -11,6 +11,7 @@ import { DB } from '../src/common/database/database.js'
 import { PG_BOSS } from '../src/common/jobs/jobs.module.js'
 import { Metrics } from '../src/common/metrics/metrics.js'
 import { env } from '../src/config/env.js'
+import { CvGenerateJob } from '../src/cv-generation/cv-generate.job.js'
 import type { Db } from '../src/db/types.js'
 import { VacancyParseJob } from '../src/vacancies/vacancy-parse.job.js'
 import { TEST_BUCKET } from './containers.js'
@@ -69,8 +70,12 @@ export async function startApp(overrides: Record<string, string | undefined> = {
 
     const db = app.get<Db>(DB)
     const boss = app.get<PgBoss>(PG_BOSS)
-    for (const queue of app.get(VacancyParseJob).queues) await boss.deleteAllJobs(queue)
-    await db.execute(sql`truncate applications, vacancies, profiles, profile_snapshots`)
+    for (const queue of [
+        ...app.get(VacancyParseJob).queues,
+        ...app.get(CvGenerateJob).queues,
+    ])
+        await boss.deleteAllJobs(queue)
+    await db.execute(sql`truncate cvs, applications, vacancies, profiles, profile_snapshots`)
     await app.listen(0, '127.0.0.1')
     const { registry } = app.get(Metrics)
 

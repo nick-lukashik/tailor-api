@@ -72,12 +72,13 @@ export const envSchema = baseEnvSchema
                 error: 'at least 32 characters (the INTERNAL_API_TOKEN of tailor-tex)',
             })
             .optional(),
-        /** The platform LLM gateway (OpenAI-compatible), its client key and the models that parse vacancies. */
+        /** The platform LLM gateway (OpenAI-compatible), its client key and the models that parse vacancies and write CVs. */
         LLM_GATEWAY_URL: z.url().default('http://llm-gateway.prod.svc'),
         LLM_GATEWAY_KEY: z.string().min(32, {
             error: 'at least 32 characters (the client key of tailor-api in llm-gateway)',
         }),
         LLM_PARSE_MODELS: modelPool('claude-sonnet-5-5:low:3,gpt-6.1-sol:low:3'),
+        LLM_CV_MODELS: modelPool('claude-sonnet-5-5:low:3,gpt-6.1-sol:low:3'),
         /**
          * Cloudflare R2 (S3 API) for the CV files: the account endpoint and an
          * API token's key pair, all three or none. Unset: the service starts,
@@ -94,6 +95,8 @@ export const envSchema = baseEnvSchema
             .default('nl-files-prod'),
         /** Every key of this service starts with it: one bucket, a folder per service. */
         R2_PREFIX: objectPrefix,
+        /** Where the CV links point: `<CV_PUBLIC_URL>/<application id>/<file name>`. */
+        CV_PUBLIC_URL: z.url().default('https://cv.nick-lukashik.com'),
     })
     .refine(
         value =>

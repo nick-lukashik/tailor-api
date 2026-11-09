@@ -69,6 +69,7 @@ describe('applications', () => {
             status: 'new',
             vacancyId: null,
             parseStatus: null,
+            cvStatus: 'none',
             createdAt: expect.any(String),
         })
         expect(new Date(res.body.createdAt).toISOString()).toBe(res.body.createdAt)
@@ -281,6 +282,7 @@ describe('applications', () => {
         expect(item).toBeDefined()
         expect(item).not.toHaveProperty('vacancy')
         expect(item).not.toHaveProperty('cv')
+        expect(item.cvStatus).toBe('none')
     })
 
     it('opens an application whose vacancy is still pending, a pasted text without a link', async () => {
