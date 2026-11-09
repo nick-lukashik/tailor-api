@@ -1,10 +1,41 @@
 import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { applications, vacancies } from '../src/db/schema.js'
+import type { ParsedVacancy } from '../src/vacancies/parse.schemas.js'
 import { OWNER, startApp, type TestApp } from './harness.js'
 
 /** With the role too: a second person with applications of their own. */
 const other = '019a5f00-0000-7000-8000-00000000b002'
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+const parsed: ParsedVacancy = {
+    title: 'Backend Engineer',
+    company: 'Example Labs',
+    companyDescription: null,
+    seniority: 'senior',
+    location: null,
+    remote: 'remote',
+    regions: [
+        'EU',
+    ],
+    employmentType: 'full-time',
+    salary: null,
+    language: 'en',
+    skills: [
+        {
+            name: 'Node.js',
+            required: true,
+        },
+    ],
+    requirements: [
+        'Node.js',
+    ],
+    responsibilities: [],
+    niceToHave: [],
+    applyChannels: [],
+    summary: 'Example Labs hires a backend engineer.',
+    warnings: [],
+}
 
 describe('applications', () => {
     let t: TestApp
@@ -47,7 +78,13 @@ describe('applications', () => {
         const { body: application } = await create('By id')
         const found = await (await t.as()).get(`/api/v1/applications/${application.id}`)
         expect(found.status).toBe(200)
-        expect(found.body).toEqual(application)
+        expect(found.body).toEqual({
+            ...application,
+            vacancy: null,
+            cv: {
+                status: 'none',
+            },
+        })
 
         for (const id of [
             '01a19d24-0000-7000-8000-000000000000',
@@ -172,5 +209,114 @@ describe('applications', () => {
         const res = await (await t.as()).get('/api/v1/applications?limit=50')
         expect(res.body.items.map((n: { company: string }) => n.company)).not.toContain('Demo')
         expect((await (await t.as()).get('/api/v1/applications/019a5f00-0000-7000-8000-0000000000ff')).status).toBe(404)
+    })
+
+    const withVacancy = async (vacancy: Partial<typeof vacancies.$inferInsert>, userId = OWNER) => {
+        const [row] = await t.db
+            .insert(vacancies)
+            .values({
+                createdBy: userId,
+                ...vacancy,
+            })
+            .returning()
+        if (!row) throw new Error('no vacancy row')
+        const [application] = await t.db
+            .insert(applications)
+            .values({
+                userId,
+                vacancyId: row.id,
+                company: row.company,
+                role: row.title,
+            })
+            .returning()
+        if (!application) throw new Error('no application row')
+        return {
+            vacancy: row,
+            applicationId: application.id,
+        }
+    }
+
+    it('opens an application with its parsed vacancy, without _meta, and no CV yet', async () => {
+        const { vacancy, applicationId } = await withVacancy({
+            url: 'https://example.com/jobs/parsed',
+            urlKey: 'https://example.com/jobs/parsed',
+            rawText: 'Example Labs is hiring a backend engineer.',
+            title: 'Backend Engineer',
+            company: 'Example Labs',
+            parseStatus: 'parsed',
+            parsed: {
+                ...parsed,
+                _meta: {
+                    model: 'claude-sonnet-5-5',
+                    effort: 'low',
+                    promptVersion: 1,
+                },
+            },
+        })
+        const res = await (await t.as()).get(`/api/v1/applications/${applicationId}`)
+        expect(res.status).toBe(200)
+        expect(res.body).toMatchObject({
+            id: applicationId,
+            vacancyId: vacancy.id,
+            parseStatus: 'parsed',
+            vacancyText: '',
+            cv: {
+                status: 'none',
+            },
+        })
+        expect(res.body.vacancy).toEqual({
+            id: vacancy.id,
+            url: 'https://example.com/jobs/parsed',
+            rawText: 'Example Labs is hiring a backend engineer.',
+            parseStatus: 'parsed',
+            parseError: null,
+            updatedAt: vacancy.updatedAt.toISOString(),
+            model: 'claude-sonnet-5-5',
+            parsed,
+        })
+
+        // The list stays light: no vacancy or CV in its items.
+        const list = await (await t.as()).get('/api/v1/applications?limit=50')
+        const item = list.body.items.find((n: { id: string }) => n.id === applicationId)
+        expect(item).toBeDefined()
+        expect(item).not.toHaveProperty('vacancy')
+        expect(item).not.toHaveProperty('cv')
+    })
+
+    it('opens an application whose vacancy is still pending, a pasted text without a link', async () => {
+        const { vacancy, applicationId } = await withVacancy({
+            rawText: 'A pasted vacancy text.',
+        })
+        const res = await (await t.as()).get(`/api/v1/applications/${applicationId}`)
+        expect(res.status).toBe(200)
+        expect(res.body.parseStatus).toBe('pending')
+        expect(res.body.vacancy).toEqual({
+            id: vacancy.id,
+            url: null,
+            rawText: 'A pasted vacancy text.',
+            parseStatus: 'pending',
+            parseError: null,
+            updatedAt: vacancy.updatedAt.toISOString(),
+            model: null,
+            parsed: null,
+        })
+        expect(res.body.cv).toEqual({
+            status: 'none',
+        })
+    })
+
+    it("does not open someone else's application with a vacancy", async () => {
+        const { applicationId } = await withVacancy(
+            {
+                rawText: 'Their vacancy text.',
+            },
+            other,
+        )
+        const res = await (await t.as()).get(`/api/v1/applications/${applicationId}`)
+        expect(res.status).toBe(404)
+        expect(res.body.code).toBe('NOT_FOUND')
+        const theirs = await (await t.as(other)).get(`/api/v1/applications/${applicationId}`)
+        expect(theirs.status).toBe(200)
+        expect(theirs.body.vacancy.rawText).toBe('Their vacancy text.')
     })
 })

@@ -5,6 +5,7 @@ import { Caller } from '@nick-lukashik/auth/nest'
 import { TailorAccess } from '../access/tailor-role.guard.js'
 import { ApiErrors } from '../common/openapi/openapi.js'
 import {
+    applicationDetailSchema,
     applicationListSchema,
     applicationSchema,
     type CreateApplication,
@@ -45,8 +46,11 @@ export class ApplicationsController {
     }
 
     @Get(':id')
+    @ApiOperation({
+        summary: "One of the caller's applications with its vacancy (text and parse) and CV status",
+    })
     @ApiOkResponse({
-        standardSchema: applicationSchema,
+        standardSchema: applicationDetailSchema,
     })
     @ApiErrors(401, 403, 404)
     get(@Caller() caller: AccessClaims, @Param('id') id: string) {

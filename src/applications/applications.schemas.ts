@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { applicationStatuses, vacancyParseStatuses } from '../db/schema.js'
+import { parsedVacancySchema } from '../vacancies/parse.schemas.js'
 
 /** The API contract of `applications`; OpenAPI is generated from these schemas. */
 export const applicationSchema = z
@@ -20,6 +21,52 @@ export const applicationSchema = z
         id: 'Application',
     })
 export type Application = z.infer<typeof applicationSchema>
+
+/** The vacancy behind an application, for its page: the pasted text and what the model read from it. */
+export const applicationVacancySchema = z
+    .object({
+        id: z.uuid(),
+        url: z.string().nullable(),
+        rawText: z.string(),
+        parseStatus: z.enum(vacancyParseStatuses),
+        parseError: z.string().nullable(),
+        updatedAt: z.iso.datetime(),
+        /** The model that parsed it (`parsed._meta.model`); null before a parse. */
+        model: z.string().nullable(),
+        /** `vacancies.parsed` without `_meta`; null until parsed. */
+        parsed: parsedVacancySchema
+            .meta({
+                id: 'ParsedVacancy',
+            })
+            .nullable(),
+    })
+    .meta({
+        id: 'ApplicationVacancy',
+    })
+export type ApplicationVacancy = z.infer<typeof applicationVacancySchema>
+
+// Stage 4 adds `generating` and `ready` (with the file's url) as a discriminated union on `status`.
+export const applicationCvSchema = z
+    .object({
+        status: z.enum([
+            'none',
+        ]),
+    })
+    .meta({
+        id: 'ApplicationCv',
+    })
+
+/** One application with its vacancy and CV (GET /applications/:id); the list stays light. */
+export const applicationDetailSchema = applicationSchema
+    .extend({
+        /** Null for one created by hand. */
+        vacancy: applicationVacancySchema.nullable(),
+        cv: applicationCvSchema,
+    })
+    .meta({
+        id: 'ApplicationDetail',
+    })
+export type ApplicationDetail = z.infer<typeof applicationDetailSchema>
 
 // Strict: an unknown or misspelled field is a client error, not silently dropped.
 export const createApplicationSchema = z
