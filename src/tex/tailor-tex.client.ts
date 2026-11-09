@@ -3,7 +3,7 @@ import type { ConfigType } from '@nestjs/config'
 import { z } from 'zod'
 import { AppError, type ErrorDetail } from '../common/http/app-error.js'
 import { texConfig } from '../config/config.js'
-import type { CvDocument, CvTemplate } from './cv-document.js'
+import { type CvDocument, type CvMeasurement, type CvTemplate, cvMeasurementSchema } from './cv-document.js'
 
 /**
  * One render: tailor-tex's own budget is 45 s per build and 60 s per request,
@@ -52,6 +52,10 @@ export class TailorTexClient {
 
     constructor(@Inject(texConfig.KEY) private readonly config: ConfigType<typeof texConfig>) {}
 
+    get configured() {
+        return Boolean(this.config.token)
+    }
+
     /** Without TAILOR_TEX_TOKEN nothing can be built: a 503 that says why. */
     assertConfigured() {
         if (!this.config.token)
@@ -65,16 +69,52 @@ export class TailorTexClient {
      * `signal` aborts the build, e.g. when the caller went away.
      */
     async render(request: RenderRequest, signal?: AbortSignal): Promise<RenderedPdf> {
+        const response = await this.post('render', 'application/pdf', request, signal)
+        if (response.ok && response.body)
+            return {
+                body: response.body,
+                length: numberHeader(response.headers.get('content-length')),
+                pages: numberHeader(response.headers.get('x-pdf-pages')),
+                fill: numberHeader(response.headers.get('x-pdf-fill')),
+            }
+        throw await this.failure(response)
+    }
+
+    /**
+     * Builds the document and returns its measurements without the PDF: the
+     * pages, the fill, the lines of each block and the widest overfull line.
+     * More pages than `maxPages` is `fits: false`, not an error; the other
+     * errors are those of `render`.
+     */
+    async measure(request: RenderRequest, signal?: AbortSignal): Promise<CvMeasurement> {
+        const response = await this.post('measure', 'application/json', request, signal)
+        if (!response.ok) throw await this.failure(response)
+        const parsed = cvMeasurementSchema.safeParse(await response.json().catch(() => undefined))
+        if (parsed.success) return parsed.data
+        this.logger.warn(
+            {
+                status: response.status,
+            },
+            'tailor-tex measure answer off the schema',
+        )
+        throw new AppError('UNAVAILABLE', 'The CV renderer is unavailable, retry later')
+    }
+
+    private async post(
+        route: 'render' | 'measure',
+        accept: string,
+        request: RenderRequest,
+        signal?: AbortSignal,
+    ): Promise<Response> {
         this.assertConfigured()
         const deadline = AbortSignal.timeout(TEX_RENDER_TIMEOUT_MS)
-        let response: Response
         try {
-            response = await fetch(`${this.config.url}/api/v1/cv/render`, {
+            return await fetch(`${this.config.url}/api/v1/cv/${route}`, {
                 method: 'POST',
                 headers: {
                     authorization: `Bearer ${this.config.token}`,
                     'content-type': 'application/json',
-                    accept: 'application/pdf',
+                    accept,
                 },
                 body: JSON.stringify(request),
                 signal: signal
@@ -96,14 +136,6 @@ export class TailorTexClient {
             )
             throw new AppError('UNAVAILABLE', 'The CV renderer is unavailable, retry later')
         }
-        if (response.ok && response.body)
-            return {
-                body: response.body,
-                length: numberHeader(response.headers.get('content-length')),
-                pages: numberHeader(response.headers.get('x-pdf-pages')),
-                fill: numberHeader(response.headers.get('x-pdf-fill')),
-            }
-        throw await this.failure(response)
     }
 
     private async failure(response: Response): Promise<AppError> {
