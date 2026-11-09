@@ -8,7 +8,7 @@ import { HealthModule } from './common/health/health.module.js'
 import { JobsModule } from './common/jobs/jobs.module.js'
 import { createLoggerModule } from './common/logging/logger.module.js'
 import { MetricsModule } from './common/metrics/metrics.module.js'
-import { appConfig, authConfig, dbConfig } from './config/config.js'
+import { appConfig, authConfig, dbConfig, llmConfig } from './config/config.js'
 import { AppConfigModule } from './config/config.module.js'
 import { CvModule } from './cv/cv.module.js'
 import * as schema from './db/schema.js'
@@ -70,10 +70,13 @@ type App = ConfigType<typeof appConfig>
             inject: [
                 dbConfig.KEY,
                 appConfig.KEY,
+                llmConfig.KEY,
             ],
-            useFactory: (db: ConfigType<typeof dbConfig>, app: App) => ({
+            useFactory: (db: ConfigType<typeof dbConfig>, app: App, llm: ConfigType<typeof llmConfig>) => ({
                 connectionString: db.url,
                 applicationName: `${app.service}-jobs`,
+                // Above the parse jobs running at once (each model's concurrency), the legacy drain and sends.
+                max: llm.parseModels.reduce((sum, model) => sum + model.concurrency, 3),
             }),
         }),
         AuthModule.forRootAsync({

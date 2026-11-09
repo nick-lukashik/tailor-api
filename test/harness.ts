@@ -12,7 +12,7 @@ import { PG_BOSS } from '../src/common/jobs/jobs.module.js'
 import { Metrics } from '../src/common/metrics/metrics.js'
 import { env } from '../src/config/env.js'
 import type { Db } from '../src/db/types.js'
-import { PARSE_QUEUE } from '../src/vacancies/vacancy-parse.job.js'
+import { VacancyParseJob } from '../src/vacancies/vacancy-parse.job.js'
 import { AUDIENCE, ISSUER, startIdentity } from './identity.js'
 import { LLM_TEST_KEY, startLlmGateway } from './llm-gateway.js'
 
@@ -59,7 +59,8 @@ export async function startApp(overrides: Record<string, string> = {}) {
     await app.init()
 
     const db = app.get<Db>(DB)
-    await app.get<PgBoss>(PG_BOSS).deleteAllJobs(PARSE_QUEUE)
+    const boss = app.get<PgBoss>(PG_BOSS)
+    for (const queue of app.get(VacancyParseJob).queues) await boss.deleteAllJobs(queue)
     await db.execute(sql`truncate applications, vacancies, profiles, profile_snapshots`)
     await app.listen(0, '127.0.0.1')
     const { registry } = app.get(Metrics)

@@ -5,10 +5,12 @@ import { llmConfig } from '../config/config.js'
 import { type Completion, classifyGatewayError, LlmCallError, readCompletion } from './llm-gateway.js'
 
 /**
- * One call. It runs in a job, never in a request, so it is outside the 10 s
- * request budget; the gateway itself allows a call up to 16 minutes.
+ * One call, its wait for a free provider slot in the gateway included (the
+ * gateway runs a few calls per provider at once across all its clients). It
+ * runs in a job, never in a request, so it is outside the 10 s request budget;
+ * the gateway itself allows a call up to 16 minutes.
  */
-export const LLM_CALL_TIMEOUT_MS = 120_000
+export const LLM_CALL_TIMEOUT_MS = 300_000
 
 export type StructuredCall<T> = {
     model: string
