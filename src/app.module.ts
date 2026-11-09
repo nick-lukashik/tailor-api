@@ -14,6 +14,7 @@ import { CvModule } from './cv/cv.module.js'
 import * as schema from './db/schema.js'
 import { MasterCvModule } from './master-cv/master-cv.module.js'
 import { ProfileModule } from './profile/profile.module.js'
+import { StorageModule } from './storage/storage.module.js'
 import { VacanciesModule } from './vacancies/vacancies.module.js'
 
 type App = ConfigType<typeof appConfig>
@@ -94,6 +95,7 @@ type App = ConfigType<typeof appConfig>
         CvModule,
         ProfileModule,
         MasterCvModule,
+        StorageModule,
         VacanciesModule,
     ],
 })

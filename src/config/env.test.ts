@@ -107,4 +107,48 @@ describe('env', () => {
         expect(result.success).toBe(false)
         expect(result.error?.issues[0]?.path[0]).toBe('LLM_PARSE_MODELS')
     })
+
+    it('starts without R2, with the bucket and prefix of prod', () => {
+        const parsed = envSchema.parse(base)
+        expect(parsed).toMatchObject({
+            R2_BUCKET: 'nl-files-prod',
+            R2_PREFIX: 'tailor/',
+        })
+        expect(parsed.R2_ENDPOINT).toBeUndefined()
+    })
+
+    it('takes the R2 endpoint and keys only together', () => {
+        const r2 = {
+            R2_ENDPOINT: 'https://example.r2.cloudflarestorage.com',
+            R2_ACCESS_KEY_ID: 'key-id',
+            R2_SECRET_ACCESS_KEY: 'secret',
+        }
+        expect(
+            envSchema.safeParse({
+                ...base,
+                ...r2,
+            }).success,
+        ).toBe(true)
+        const { R2_SECRET_ACCESS_KEY: _secret, ...partial } = r2
+        const result = envSchema.safeParse({
+            ...base,
+            ...partial,
+        })
+        expect(result.error?.issues.map(issue => issue.path.join('.'))).toEqual([
+            'R2_ENDPOINT',
+        ])
+    })
+
+    it.each([
+        '/tailor/',
+        'tailor',
+        'a//b/',
+    ])('refuses the object prefix %j', prefix => {
+        expect(
+            envSchema.safeParse({
+                ...base,
+                R2_PREFIX: prefix,
+            }).success,
+        ).toBe(false)
+    })
 })

@@ -37,3 +37,11 @@ export const llmConfig = registerAs('llm', () => ({
     key: env().LLM_GATEWAY_KEY,
     parseModels: env().LLM_PARSE_MODELS,
 }))
+
+export const storageConfig = registerAs('storage', () => ({
+    endpoint: env().R2_ENDPOINT,
+    accessKeyId: env().R2_ACCESS_KEY_ID,
+    secretAccessKey: env().R2_SECRET_ACCESS_KEY,
+    bucket: env().R2_BUCKET,
+    prefix: env().R2_PREFIX,
+}))

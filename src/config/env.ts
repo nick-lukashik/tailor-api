@@ -46,6 +46,14 @@ const modelPool = (defaults: string) =>
 /** A model of a job's pool: its id, effort and how many calls a pod makes with it at once. */
 export type PoolModelConfig = z.output<typeof poolModelEntry>
 
+/** `tailor/`: a prefix of object keys, empty or ending in `/`, never starting with one. */
+const objectPrefix = z
+    .string()
+    .regex(/^([A-Za-z0-9._-]+\/)*$/, {
+        error: 'empty, or path segments each ending in /, e.g. tailor/',
+    })
+    .default('tailor/')
+
 /** Every variable this service reads. Nothing else touches process.env. */
 export const envSchema = baseEnvSchema
     .extend(postgresEnvSchema.shape)
@@ -70,7 +78,42 @@ export const envSchema = baseEnvSchema
             error: 'at least 32 characters (the client key of tailor-api in llm-gateway)',
         }),
         LLM_PARSE_MODELS: modelPool('claude-sonnet-5-5:low:3,gpt-6.1-sol:low:3'),
+        /**
+         * Cloudflare R2 (S3 API) for the CV files: the account endpoint and an
+         * API token's key pair, all three or none. Unset: the service starts,
+         * and a CV generation fails with `storage_not_configured`.
+         */
+        R2_ENDPOINT: z.url().optional(),
+        R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+        R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+        R2_BUCKET: z
+            .string()
+            .regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/, {
+                error: 'an R2 bucket name: lowercase letters, digits and -',
+            })
+            .default('nl-files-prod'),
+        /** Every key of this service starts with it: one bucket, a folder per service. */
+        R2_PREFIX: objectPrefix,
     })
+    .refine(
+        value =>
+            [
+                value.R2_ENDPOINT,
+                value.R2_ACCESS_KEY_ID,
+                value.R2_SECRET_ACCESS_KEY,
+            ].every(item => item === undefined)
+            || [
+                value.R2_ENDPOINT,
+                value.R2_ACCESS_KEY_ID,
+                value.R2_SECRET_ACCESS_KEY,
+            ].every(item => item !== undefined),
+        {
+            error: 'R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are set together or not at all',
+            path: [
+                'R2_ENDPOINT',
+            ],
+        },
+    )
 
 export type Env = z.output<typeof envSchema>
 
