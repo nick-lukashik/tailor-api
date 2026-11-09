@@ -9,8 +9,8 @@ import { appConfig } from './config/config.js'
 
 /**
  * Hard stop: Kubernetes kills the pod 30 s after SIGTERM, so the graceful path
- * (delay, HTTP, pools, and consumers or jobs once added) must finish within
- * 25 s. If something hangs, exit with an error instead of being killed silently.
+ * (delay, HTTP, pg-boss stop, pools) must finish within 25 s. If something
+ * hangs, exit with an error instead of being killed silently.
  */
 const SHUTDOWN_DEADLINE_MS = 25_000
 for (const signal of [
