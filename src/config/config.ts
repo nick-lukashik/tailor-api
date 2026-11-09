@@ -35,5 +35,5 @@ export const texConfig = registerAs('tex', () => ({
 export const llmConfig = registerAs('llm', () => ({
     url: env().LLM_GATEWAY_URL.replace(/\/+$/, ''),
     key: env().LLM_GATEWAY_KEY,
-    parseModel: env().LLM_PARSE_MODEL,
+    parseModels: env().LLM_PARSE_MODELS,
 }))

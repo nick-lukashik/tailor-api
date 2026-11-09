@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { and, eq, or, sql } from 'drizzle-orm'
+import { and, eq, inArray, or, sql } from 'drizzle-orm'
 import { DB } from '../common/database/database.js'
 import { applications, vacancies } from '../db/schema.js'
 import type { Db, Tx, VacancyRow } from '../db/types.js'
@@ -86,6 +86,88 @@ export class VacanciesRepository {
                 updatedAt: sql`now()`,
             })
             .where(eq(vacancies.id, id))
+    }
+
+    /**
+     * Locks the vacancies before their parse is queued. Every path that queues
+     * one (intake, re-parse, a move to another model) holds this row lock, so
+     * two of them never decide the queue of one vacancy at the same time.
+     */
+    async lockForParse(tx: Tx, ids: string[]) {
+        if (ids.length === 0) return
+        await tx
+            .select({
+                id: vacancies.id,
+            })
+            .from(vacancies)
+            .where(inArray(vacancies.id, ids))
+            .orderBy(vacancies.id)
+            .for('update')
+    }
+
+    /**
+     * Live (queued or active) parse jobs, read from pg-boss's own table: the
+     * count per queue, and the queue of each vacancy that has one (a queued job
+     * before an active one). pg-boss's queue stats are refreshed by its monitor,
+     * too stale to balance a burst on.
+     */
+    async liveParseJobs(
+        tx: Tx,
+        queues: string[],
+        vacancyIds: string[],
+    ): Promise<{
+        load: Map<string, number>
+        live: Map<
+            string,
+            {
+                queue: string
+                queued: boolean
+            }
+        >
+    }> {
+        const names = sql.param(queues)
+        const counts = await tx.execute<{
+            name: string
+            count: number
+        }>(sql`
+            select name, count(*)::int as count from pgboss.job
+            where name = any(${names}::text[]) and state < 'completed'
+            group by name
+        `)
+        const keys =
+            vacancyIds.length === 0
+                ? {
+                      rows: [],
+                  }
+                : await tx.execute<{
+                      key: string
+                      name: string
+                      queued: boolean
+                  }>(sql`
+                      select distinct on (singleton_key) singleton_key as key, name, state < 'active' as queued
+                      from pgboss.job
+                      where name = any(${names}::text[])
+                        and singleton_key = any(${sql.param(vacancyIds)}::text[])
+                        and state < 'completed'
+                      order by singleton_key, state
+                  `)
+        return {
+            load: new Map(
+                counts.rows.map(row => [
+                    row.name,
+                    row.count,
+                ]),
+            ),
+            live: new Map(
+                keys.rows.map(row => [
+                    row.key,
+                    {
+                        queue: row.name,
+                        queued: row.queued,
+                    },
+                ]),
+            ),
+        }
     }
 
     async findById(id: string): Promise<VacancyRow | undefined> {

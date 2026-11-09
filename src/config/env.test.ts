@@ -24,7 +24,87 @@ describe('env', () => {
         ])
         expect(envSchema.parse(base)).toMatchObject({
             LLM_GATEWAY_URL: 'http://llm-gateway.prod.svc',
-            LLM_PARSE_MODEL: 'claude-haiku-5-5',
+            LLM_PARSE_MODELS: [
+                {
+                    model: 'claude-sonnet-5-5',
+                    effort: 'low',
+                    concurrency: 3,
+                },
+                {
+                    model: 'gpt-6.1-sol',
+                    effort: 'low',
+                    concurrency: 3,
+                },
+            ],
         })
+    })
+
+    it('reads the parse models as model:effort:concurrency', () => {
+        expect(
+            envSchema.parse({
+                ...base,
+                LLM_PARSE_MODELS: ' claude-opus-5-5 : high : 1 ',
+            }).LLM_PARSE_MODELS,
+        ).toEqual([
+            {
+                model: 'claude-opus-5-5',
+                effort: 'high',
+                concurrency: 1,
+            },
+        ])
+    })
+
+    it.each([
+        [
+            'no entry',
+            '',
+        ],
+        [
+            'an empty entry',
+            'claude-sonnet-5-5:low:3,',
+        ],
+        [
+            'an unknown effort',
+            'claude-sonnet-5-5:extreme:3',
+        ],
+        [
+            'concurrency 0',
+            'claude-sonnet-5-5:low:0',
+        ],
+        [
+            'concurrency 11',
+            'claude-sonnet-5-5:low:11',
+        ],
+        [
+            'concurrency not a whole number',
+            'claude-sonnet-5-5:low:1.5',
+        ],
+        [
+            'no concurrency',
+            'claude-sonnet-5-5:low',
+        ],
+        [
+            'an extra part',
+            'claude-sonnet-5-5:low:3:x',
+        ],
+        [
+            'a model id with a space',
+            'claude sonnet:low:3',
+        ],
+        [
+            'a model twice',
+            'claude-sonnet-5-5:low:3,claude-sonnet-5-5:high:1',
+        ],
+        [
+            'two models with one queue name',
+            'gpt-6.1-sol:low:3,gpt-6-1-sol:low:3',
+        ],
+    ])('refuses parse models with %s', (_, value) => {
+        const result = envSchema.safeParse({
+            ...base,
+            LLM_PARSE_MODELS: value,
+        })
+        expect(result.success).toBe(false)
+        expect(result.error?.issues[0]?.path[0]).toBe('LLM_PARSE_MODELS')
     })
 })

@@ -54,6 +54,11 @@ const parsed: ParsedVacancy = {
     warnings: [],
 }
 
+const MODELS = [
+    'claude-sonnet-5-5',
+    'gpt-6.1-sol',
+]
+
 const text = 'Example Labs is hiring a Senior Backend Engineer (Node.js) in Berlin, hybrid. EUR 70-90k.'
 
 describe('vacancy parse job', () => {
@@ -99,8 +104,16 @@ describe('vacancy parse job', () => {
         const { vacancyId, applicationId } = res.body.items[0]
         await settled(vacancyId).toBe('parsed')
 
+        const [call] = callsFor(text)
         expect(await vacancy(vacancyId)).toMatchObject({
-            parsed,
+            parsed: {
+                ...parsed,
+                _meta: {
+                    model: call?.body.model,
+                    effort: 'low',
+                    promptVersion: 1,
+                },
+            },
             title: 'Senior Backend Engineer',
             company: 'Example Labs',
             parseError: null,
@@ -112,13 +125,13 @@ describe('vacancy parse job', () => {
             parseStatus: 'parsed',
         })
 
-        const [call] = callsFor(text)
         expect(call).toMatchObject({
             path: '/api/v1/chat/completions',
             authorization: `Bearer ${LLM_TEST_KEY}`,
             idempotencyKey: expect.stringMatching(/^vacancy-parse-/),
             body: {
-                model: 'claude-haiku-5-5',
+                model: expect.toBeOneOf(MODELS),
+                reasoning_effort: 'low',
                 response_format: {
                     type: 'json_schema',
                     json_schema: {
@@ -233,11 +246,103 @@ describe('vacancy parse job', () => {
         const attempts = callsFor(marker)
         expect(attempts).toHaveLength(2)
         expect(attempts[1]?.idempotencyKey).toBe(attempts[0]?.idempotencyKey)
+        // Not a provider outage: the same model again.
+        expect(attempts[1]?.body.model).toBe(attempts[0]?.body.model)
         expect(
             await t.metric('vacancy_parse_total', {
                 result: 'retry',
+                model: attempts[0]?.body.model ?? '',
             }),
         ).toBeGreaterThanOrEqual(1)
+    }, 30_000)
+
+    it('spreads a batch over both models with their effort', async () => {
+        const markers = [
+            `${text} (pool a)`,
+            `${text} (pool b)`,
+        ]
+        const res = await intake(
+            markers.map(marker => ({
+                text: marker,
+            })),
+        )
+        for (const item of res.body.items) await settled(item.vacancyId).toBe('parsed')
+        const calls = markers.flatMap(marker => callsFor(marker))
+        expect(calls.map(call => call.body.model).sort()).toEqual(MODELS)
+        expect(calls.map(call => call.body.reasoning_effort)).toEqual([
+            'low',
+            'low',
+        ])
+        for (const [index, item] of res.body.items.entries())
+            expect((await vacancy(item.vacancyId))?.parsed).toMatchObject({
+                _meta: {
+                    model: calls[index]?.body.model,
+                    effort: 'low',
+                },
+            })
+        for (const model of MODELS)
+            expect(
+                await t.metric('vacancy_parse_total', {
+                    result: 'parsed',
+                    model,
+                }),
+            ).toBeGreaterThanOrEqual(1)
+    })
+
+    it('moves a vacancy to the other model when its provider is out of quota', async () => {
+        const marker = `${text} (quota)`
+        let out: string | undefined
+        t.llm.answer(call => {
+            if (!call.body.messages.some(message => message.content.includes(marker))) return completionOf(parsed)
+            out ??= call.body.model
+            return call.body.model === out ? errorOf(429, 'provider_quota') : completionOf(parsed)
+        })
+        const { vacancyId } = (
+            await intake([
+                {
+                    text: marker,
+                },
+            ])
+        ).body.items[0]
+        await settled(vacancyId).toBe('parsed')
+        const attempts = callsFor(marker)
+        expect(attempts).toHaveLength(2)
+        const [first, second] = attempts.map(call => call.body.model)
+        expect(second).not.toBe(first)
+        expect(attempts[1]?.idempotencyKey).not.toBe(attempts[0]?.idempotencyKey)
+        expect((await vacancy(vacancyId))?.parsed).toMatchObject({
+            _meta: {
+                model: second,
+            },
+        })
+        expect(
+            await t.metric('vacancy_parse_total', {
+                result: 'moved',
+                model: first ?? '',
+            }),
+        ).toBe(1)
+    })
+
+    it('moves only once: a second outage retries on the model it moved to', async () => {
+        const marker = `${text} (quota twice)`
+        t.llm.answer(call =>
+            call.body.messages.some(message => message.content.includes(marker))
+                ? errorOf(503, 'provider_unavailable')
+                : completionOf(parsed),
+        )
+        await intake([
+            {
+                text: marker,
+            },
+        ])
+        await expect
+            .poll(() => callsFor(marker).length, {
+                timeout: 20_000,
+            })
+            .toBeGreaterThanOrEqual(3)
+        const [first, second, third] = callsFor(marker).map(call => call.body.model)
+        expect(second).not.toBe(first)
+        expect(third).toBe(second)
     }, 30_000)
 
     it('fails at once on a 400 with a short code, nothing of the model in it', async () => {

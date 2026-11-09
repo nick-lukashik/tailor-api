@@ -8,6 +8,7 @@ export type GatewayCall = {
     idempotencyKey: string | undefined
     body: {
         model: string
+        reasoning_effort?: string
         messages: {
             role: string
             content: string

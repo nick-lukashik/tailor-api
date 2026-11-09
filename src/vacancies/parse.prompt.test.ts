@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { LlmCallError } from '../llm/llm-gateway.js'
 import { PARSE_SYSTEM_PROMPT, parseUserMessage } from './parse.prompt.js'
 import { parsedVacancySchema } from './parse.schemas.js'
-import { afterFailure, clip } from './vacancy-parse.job.js'
+import { clip } from './vacancy-parse.job.js'
 
 describe('vacancy parse prompt', () => {
     it('puts the text and the link in as delimited data', () => {
@@ -27,14 +26,6 @@ describe('vacancy parse prompt', () => {
 })
 
 describe('vacancy parse job', () => {
-    it('retries a retryable failure while retries are left, then fails', () => {
-        const down = new LlmCallError('llm_provider_unavailable', true, 503)
-        expect(afterFailure(down, 0, 5)).toBe('retry')
-        expect(afterFailure(down, 4, 5)).toBe('retry')
-        expect(afterFailure(down, 5, 5)).toBe('fail')
-        expect(afterFailure(new LlmCallError('llm_bad_request', false, 400), 0, 5)).toBe('fail')
-    })
-
     it('fits title and company into 200 characters, trimmed', () => {
         expect(clip('  Example  ')).toBe('Example')
         expect(clip(null)).toBe('')
