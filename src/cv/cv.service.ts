@@ -13,8 +13,8 @@ export type CvFile = {
 
 /**
  * The CV of an application, by its id: `cv.<domain>/<application id>/<file name>`.
- * A mock for now: every application gets the same demo PDF under its own name;
- * the real files (R2) come with the pipeline.
+ * Only the demo rows of 0001 (no person) have one for now, the demo PDF under
+ * each one's own name; a real application is a 404 until its CV is built (stage 4).
  */
 @Injectable()
 export class CvService {
@@ -25,9 +25,9 @@ export class CvService {
 
     constructor(private readonly applications: ApplicationsService) {}
 
-    /** An unknown or malformed id is a 404 (ApplicationsService.getForCv). */
+    /** An unknown or malformed id, or a real application, is a 404 (ApplicationsService.getDemoForCv). */
     async get(applicationId: string): Promise<CvFile> {
-        const application = await this.applications.getForCv(applicationId)
+        const application = await this.applications.getDemoForCv(applicationId)
         return {
             fileName: cvFileName(CV_OWNER, application.role),
             content: this.demo,

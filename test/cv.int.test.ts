@@ -3,18 +3,23 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { startApp, type TestApp } from './harness.js'
 
 const NAME = 'Nick-Lukashik-Senior-Full-Stack-Engineer-CV.pdf'
+/** A demo row of 0001: no person, so the demo PDF is served for it. */
+const id = '019a5f00-0000-7000-8000-000000000001'
 
 describe('cv files', () => {
     let t: TestApp
-    let id: string
+    let real: string
 
     beforeAll(async () => {
         t = await startApp()
+        await t.db.execute(
+            sql`insert into applications (id, company, role) values (${id}, 'Example Labs', 'Senior Full-stack Engineer') on conflict do nothing`,
+        )
         const created = await (await t.as()).post('/api/v1/applications').send({
             company: 'Example Labs',
             role: 'Senior Full-stack Engineer',
         })
-        id = created.body.id
+        real = created.body.id
     })
     afterAll(async () => {
         await t?.close()
@@ -31,7 +36,7 @@ describe('cv files', () => {
                 stream.on('end', () => done(null, Buffer.concat(chunks)))
             })
 
-    it('serves the CV of an application inline under its name, never cached or indexed', async () => {
+    it('serves the demo CV of a demo row inline under its name with no token, never cached or indexed', async () => {
         const res = await pdf(`/api/v1/cv/${id}/${NAME}`)
         expect(res.status).toBe(200)
         expect(res.headers['content-type']).toBe('application/pdf')
@@ -44,7 +49,7 @@ describe('cv files', () => {
         expect(Number(res.headers['content-length'])).toBe(body.length)
     })
 
-    it('redirects the id alone and a wrong name to the canonical link, relative to the path', async () => {
+    it('redirects the id alone and a wrong name of a demo row to the canonical link, relative to the path', async () => {
         const bare = await t.http().get(`/api/v1/cv/${id}`)
         expect(bare.status).toBe(302)
         expect(bare.headers.location).toBe(`${id}/${NAME}`)
@@ -69,13 +74,15 @@ describe('cv files', () => {
         }
     })
 
-    it('serves the CV of an application without a person (the demo rows), with no token', async () => {
-        const demo = '019a5f00-0000-7000-8000-000000000001'
-        await t.db.execute(
-            sql`insert into applications (id, company, role) values (${demo}, 'Example Labs', 'Senior Full-stack Engineer') on conflict do nothing`,
-        )
-        const res = await pdf(`/api/v1/cv/${demo}/${NAME}`)
-        expect(res.status).toBe(200)
-        expect(res.headers['content-type']).toBe('application/pdf')
+    it('answers 404 for a real application until its CV is built', async () => {
+        for (const path of [
+            `/api/v1/cv/${real}`,
+            `/api/v1/cv/${real}/${NAME}`,
+            `/api/v1/cv/${real}/cv.pdf`,
+        ]) {
+            const res = await t.http().get(path)
+            expect(res.status).toBe(404)
+            expect(res.body.code).toBe('NOT_FOUND')
+        }
     })
 })
