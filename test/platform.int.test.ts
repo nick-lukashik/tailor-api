@@ -51,6 +51,7 @@ describe('health, OpenAPI, metrics', () => {
                 '/api/v1/profile',
                 '/api/v1/profile/schema',
                 '/api/v1/vacancies/intake',
+                '/api/v1/vacancies/{id}/parse',
             ]),
         )
         expect(res.body.components.schemas.Application.required).toEqual([

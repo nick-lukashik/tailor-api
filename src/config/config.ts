@@ -31,3 +31,9 @@ export const texConfig = registerAs('tex', () => ({
     url: env().TAILOR_TEX_URL.replace(/\/+$/, ''),
     token: env().TAILOR_TEX_TOKEN,
 }))
+
+export const llmConfig = registerAs('llm', () => ({
+    url: env().LLM_GATEWAY_URL.replace(/\/+$/, ''),
+    key: env().LLM_GATEWAY_KEY,
+    parseModel: env().LLM_PARSE_MODEL,
+}))

@@ -2,9 +2,9 @@
 
 The API of Tailor: a vacancy in, a CV and a cover letter for it out, and the application tracked until an offer or a refusal. Its web app is [`tailor-web`](https://github.com/nick-lukashik/tailor-web) on `tailor.<domain>`; this API is internal to it, except the CV files on `cv.<domain>`.
 
-Created from [`nest-starter`](https://github.com/nick-lukashik/nest-starter) (`.template-version`). Modules: `access` (id-api access tokens and the `tailor` role), `applications` (the person's pool, their own; three demo rows without a person from migration `0001_demo_data`, listed to nobody), `vacancies` (one shared row per vacancy, found again by its normalized link; pasted links and texts go into the pool unparsed, `pending`), `profile` (the person's profile document, versions and snapshots), `master-cv` (a PDF of the profile without a vacancy, built by [`tailor-tex`](https://github.com/nick-lukashik/tailor-tex)) and `cv` (the CV of an application by its id; the same demo PDF for all, under each one's own file name). The pipeline and the CV files come with the logic.
+Created from [`nest-starter`](https://github.com/nick-lukashik/nest-starter) (`.template-version`). Modules: `access` (id-api access tokens and the `tailor` role), `applications` (the person's pool, their own; three demo rows without a person from migration `0001_demo_data`, listed to nobody), `vacancies` (one shared row per vacancy, found again by its normalized link; pasted links and texts go into the pool, and the `vacancy.parse` job reads each with a model), `llm` (the client of the platform [`llm-gateway`](https://github.com/nick-lukashik/llm-gateway)), `profile` (the person's profile document, versions and snapshots), `master-cv` (a PDF of the profile without a vacancy, built by [`tailor-tex`](https://github.com/nick-lukashik/tailor-tex)) and `cv` (the CV of an application by its id; the same demo PDF for all, under each one's own file name). The pipeline and the CV files come with the logic.
 
-Redis, RabbitMQ (events through outbox/inbox) and pg-boss (jobs) are not here. When a feature needs one, copy it from [`nest-example`](https://github.com/nick-lukashik/nest-example) ("Add a capability" below). The shared code in `src/common/` is identical to the starter's, so a fix there is ported from the starter (`.github` `docs/templates.md`).
+pg-boss (jobs, schema `pgboss` in the same database) runs the vacancy parse job. Redis and RabbitMQ (events through outbox/inbox) are not here. When a feature needs one, copy it from [`nest-example`](https://github.com/nick-lukashik/nest-example) ("Add a capability" below). The shared code in `src/common/` is identical to the starter's, so a fix there is ported from the starter (`.github` `docs/templates.md`).
 
 ## Routes in prod
 
@@ -67,6 +67,7 @@ Every `/api/v1` route but `/api/v1/cv/*` needs `Authorization: Bearer <access to
 | `GET /api/v1/applications/:id`                                              | `Application` or 404                                                                                          |
 | `POST /api/v1/applications` `{ company, role?, vacancyUrl?, vacancyText? }` | 201 `Application` (status `new`), the caller's                                                                |
 | `POST /api/v1/vacancies/intake` `{ items: [{ url?, text? }] }`              | 200 `{ created, existing, items: [{ applicationId, vacancyId, result }] }` in input order (see below)         |
+| `POST /api/v1/vacancies/:id/parse`                                          | 202 `{ vacancyId, parseStatus: 'pending' }`: parses it again; 404 unless it is in the caller's pool           |
 | `GET /api/v1/profile`                                                       | `{ version, updatedAt, document }`; 404 before the first save                                                 |
 | `PUT /api/v1/profile` the whole document                                    | `{ version, sha256, updatedAt }`: version + 1 and a snapshot; 400 with every bad path; `{}` is an empty one   |
 | `GET /api/v1/profile/schema`                                                | JSON Schema (draft 2020-12) of the document, for editors                                                      |
@@ -80,7 +81,17 @@ Error body: `{ code, message, details?: { path, message }[], requestId }` with `
 
 ## Vacancy intake
 
-`POST /api/v1/vacancies/intake` takes 1–200 items, each a link (http/https, up to 2048), a raw text (up to 100 000) or both; an item with neither is a 400 at `items.<n>`. A vacancy is a shared row (`vacancies`), a person's application points at it (`applications.vacancy_id`, one per person and vacancy). In one transaction per request: a link is found again by its key (`vacancyUrlKey`: lowercase scheme and host, no `www.`, fragment, `utm_*`, `gclid`, `fbclid`, `ref`, `source`, `src`, `trk`, sorted params, no trailing slash) or creates the vacancy; a found vacancy with an empty text takes the item's text. A text without a link is always a new vacancy. Then the caller's application is created (`new`, company and role from the vacancy, empty until parsed) or reported `existing`. Nothing is parsed yet: `parseStatus` is `pending`; someone else's application stays a 404.
+`POST /api/v1/vacancies/intake` takes 1–200 items, each a link (http/https, up to 2048), a raw text (up to 100 000) or both; an item with neither is a 400 at `items.<n>`. A vacancy is a shared row (`vacancies`), a person's application points at it (`applications.vacancy_id`, one per person and vacancy). In one transaction per request: a link is found again by its key (`vacancyUrlKey`: lowercase scheme and host, no `www.`, fragment, `utm_*`, `gclid`, `fbclid`, `ref`, `source`, `src`, `trk`, sorted params, no trailing slash) or creates the vacancy; a found vacancy with an empty text takes the item's text. A text without a link is always a new vacancy. Then the caller's application is created (`new`, company and role from the vacancy, empty until parsed) or reported `existing`. In the same transaction a `vacancy.parse` job is queued for every vacancy the request created and every known one whose empty text it filled (that one is `pending` again); someone else's application stays a 404.
+
+## Vacancy parsing
+
+The pg-boss job `vacancy.parse { vacancyId }` (`src/vacancies/vacancy-parse.job.ts`) reads a vacancy with a model through the LLM gateway (`POST {LLM_GATEWAY_URL}/api/v1/chat/completions`, `response_format: json_schema`, model `LLM_PARSE_MODEL`, 120 s per call, an `Idempotency-Key` per job so a retry reuses an answer the gateway already has):
+
+- **Queue.** `stately` with the vacancy id as `singletonKey`: at most one queued and one active parse per vacancy. 5 retries with backoff from 5 s up to 5 min, expiry 180 s, 2 at a time per pod.
+- **No text** (a link only): `failed`, `parse_error` `no_text`, no model call. A later stage fetches the page by its link there. A text pasted later for the same link queues the parse again.
+- **Parsed.** The answer (`src/vacancies/parse.schemas.ts`: title, company, companyDescription, seniority, location, remote, regions, employmentType, salary, language, skills, requirements, responsibilities, niceToHave, applyChannels, summary, warnings) goes to `parsed` whole, `title` and `company` trimmed to 200, `parse_status` `parsed`; in the same transaction every application on the vacancy gets the company and role it still has empty.
+- **Failed.** 5xx, 429, a timeout or an unreachable gateway are retried; another 4xx, an answer off the schema or the last retry make it `failed` with a short code: `llm_<gateway code>` (`llm_bad_request`, `llm_provider_quota`, …), `llm_http_<status>`, `llm_timeout`, `llm_unreachable`, `llm_invalid_output`. `POST /api/v1/vacancies/:id/parse` queues it again.
+- **Prompt.** `src/vacancies/parse.prompt.ts`, ported from Work Finder's job parser. The vacancy text and link go in as data between `<vacancy>` and `<link>` tags, never as instructions. Prompts, texts, answers and the key are never logged; the logs carry ids, codes, tokens and time. `vacancy_parse_total{result}` counts parsed, failed, retry and skipped.
 
 ## Profile
 
@@ -123,6 +134,7 @@ A dependency that hangs fails the request fast instead of filling the pool (serv
 | Whole request                        | 10 s                       | `RequestTimeoutInterceptor` (`src/common/http/request-timeout.ts`)                                  | 504 `TIMEOUT`; `http_server_request_timeouts_total`                                                     |
 | Whole request, master CV PDF         | **65 s** (contract: 10 s)  | `@RequestBudget` on the route (`src/request-budget.ts`, `MASTER_CV_REQUEST_BUDGET_MS`)              | 504 `TIMEOUT`                                                                                           |
 | tailor-tex render                    | 60 s                       | `TEX_RENDER_TIMEOUT_MS` (`src/tex/tailor-tex.client.ts`); tailor-tex itself stops a build at 45 s   | 504 `TIMEOUT`                                                                                           |
+| LLM gateway call (in a job)          | 120 s                      | `LLM_CALL_TIMEOUT_MS` (`src/llm/llm-gateway.client.ts`); the job expires at 180 s                   | `llm_timeout`, retried                                                                                  |
 | SQL statement                        | 5 s                        | `statement_timeout`, a startup parameter of every pool connection (`DATABASE_TIMEOUTS`)             | 503 `UNAVAILABLE`                                                                                       |
 | Waiting for a lock                   | 2 s                        | `lock_timeout` (row and table locks, e.g. a migration's `ALTER TABLE`)                              | 503 `UNAVAILABLE`                                                                                       |
 | Transaction idle without a statement | 10 s                       | `idle_in_transaction_session_timeout`: the server ends a leaked transaction                         | the connection is closed and replaced                                                                   |
@@ -151,7 +163,8 @@ pnpm infra:up
 # as in Kubernetes: read-only root filesystem, no capabilities, uid 10001
 docker run --rm --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
   --user 10001:10001 --network tailor-api_default -p 4000:3000 -p 9464:9464 \
-  -e DATABASE_URL=postgres://app:app@postgres:5432/app tailor-api
+  -e DATABASE_URL=postgres://app:app@postgres:5432/app \
+  -e LLM_GATEWAY_KEY=llm-tailor-api-local-only-key-change-me-0123456789 tailor-api
 # migrations from the same image
 docker run --rm --read-only --tmpfs /tmp --user 10001:10001 --network tailor-api_default \
   -e DATABASE_URL=postgres://app:app@postgres:5432/app tailor-api node dist/db/migrate.js
@@ -179,11 +192,12 @@ The image follows the [service runtime contract](https://github.com/nick-lukashi
 
 - Image: `ghcr.io/nick-lukashik/<repo-name>`, tags `sha-<7 chars>` and the full SHA, deployed by digest only. The same image goes to stage and then to prod.
 - gitops: `apps/<svc>/prod/kustomization.yaml` includes `components/service` and `components/api`, sets the host, and has one `images:` entry `ghcr.io/nick-lukashik/<svc>` with a `digest`. The deploy PR changes only that digest.
-- Config through `envFrom`: non-secret values (`LOG_LEVEL`, `TRUST_PROXY_HOPS`, `DATABASE_POOL_MAX`, …) in the ConfigMap `<svc>-config`; `ID_JWKS_URL`, `TOKEN_ISSUER` and `TOKEN_AUDIENCE` default to prod (`http://id-api.prod.svc/.well-known/jwks.json`, `https://id.nick-lukashik.com`, `nick-lukashik`), and the pod needs egress to id-api (the `api-client` label); `TAILOR_TEX_URL` defaults to `http://tailor-tex.prod.svc`; `DATABASE_URL` and `TAILOR_TEX_TOKEN` (the `INTERNAL_API_TOKEN` of tailor-tex; without it the master CV answers 503) in the SealedSecret `<svc>-secrets`. `PORT=3000` comes from gitops; `APP_VERSION` from the image. A bad or missing value stops the process at start.
+- Config through `envFrom`: non-secret values (`LOG_LEVEL`, `TRUST_PROXY_HOPS`, `DATABASE_POOL_MAX`, …) in the ConfigMap `<svc>-config`; `ID_JWKS_URL`, `TOKEN_ISSUER` and `TOKEN_AUDIENCE` default to prod (`http://id-api.prod.svc/.well-known/jwks.json`, `https://id.nick-lukashik.com`, `nick-lukashik`), and the pod needs egress to id-api (the `api-client` label); `TAILOR_TEX_URL` defaults to `http://tailor-tex.prod.svc`, `LLM_GATEWAY_URL` to `http://llm-gateway.prod.svc` and `LLM_PARSE_MODEL` to `claude-haiku-5-5`; `DATABASE_URL`, `TAILOR_TEX_TOKEN` (the `INTERNAL_API_TOKEN` of tailor-tex; without it the master CV answers 503) and `LLM_GATEWAY_KEY` (the client key of tailor-api in llm-gateway; required, the process does not start without it) in the SealedSecret `<svc>-secrets`. `PORT=3000` comes from gitops; `APP_VERSION` from the image. A bad or missing value stops the process at start.
 - Migrations: `components/api` runs `node dist/db/migrate.js` as an Argo CD `Sync`-hook Job in wave 0 with the same image, config and secrets: after `<svc>-secrets` (wave -1), before the Deployment (wave 1), so a failed migration stops the rollout. See "Migrations" for the rules a migration follows.
 - Probes on the `http` port: `/health/live` (the process answers) and `/health/ready` (503 without Postgres). Both return `x-app-version`, which the post-deploy smoke check waits for.
 - Metrics: Prometheus text on port `9464` (`METRICS_PORT`), path `/metrics`, scraped through the ServiceMonitor from `components/api`. Never on the public `http` port.
 - Callers: only Traefik and pods labelled `nick-lukashik.com/api-client: "true"` (NetworkPolicy from `components/api`).
-- Egress: id-api and tailor-tex, both admitting `api-client` pods.
+- Egress: id-api and tailor-tex, both admitting `api-client` pods, and llm-gateway, which admits tailor-api by name.
+- Jobs: pg-boss keeps its own pool of 4 connections per pod (beside `DATABASE_POOL_MAX`) and its schema `pgboss`, installed and upgraded by the migrate Job and at start.
 
 Conventions for agents and people: `AGENTS.md`; library rules: `.claude/rules/`.

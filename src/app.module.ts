@@ -5,6 +5,7 @@ import { AccessModule } from './access/access.module.js'
 import { ApplicationsModule } from './applications/applications.module.js'
 import { DatabaseModule } from './common/database/database.module.js'
 import { HealthModule } from './common/health/health.module.js'
+import { JobsModule } from './common/jobs/jobs.module.js'
 import { createLoggerModule } from './common/logging/logger.module.js'
 import { MetricsModule } from './common/metrics/metrics.module.js'
 import { appConfig, authConfig, dbConfig } from './config/config.js'
@@ -18,9 +19,9 @@ import { VacanciesModule } from './vacancies/vacancies.module.js'
 type App = ConfigType<typeof appConfig>
 
 /**
- * The base every service needs. Redis, RabbitMQ (outbox/inbox) and pg-boss
- * are added only by a service that uses them: copy the module from
- * nest-example and add it here (README, "Add a capability").
+ * The base every service needs, plus pg-boss for the vacancy parse job. Redis
+ * and RabbitMQ (outbox/inbox) are added only by a feature that uses them: copy
+ * the module from nest-example and add it here (README, "Add a capability").
  */
 @Module({
     imports: [
@@ -63,6 +64,16 @@ type App = ConfigType<typeof appConfig>
                 url: db.url,
                 max: db.max,
                 applicationName: app.service,
+            }),
+        }),
+        JobsModule.forRootAsync({
+            inject: [
+                dbConfig.KEY,
+                appConfig.KEY,
+            ],
+            useFactory: (db: ConfigType<typeof dbConfig>, app: App) => ({
+                connectionString: db.url,
+                applicationName: `${app.service}-jobs`,
             }),
         }),
         AuthModule.forRootAsync({
