@@ -23,6 +23,7 @@ const answer: MaterialsAnswer = {
         'A checkout 2x as fast',
         'Owns what he builds',
     ],
+    answers: [],
 }
 
 const materialsReply = (output: MaterialsAnswer = answer) =>
@@ -161,7 +162,7 @@ describe('Application materials', () => {
             cvId: cv?.id,
             version: 1,
             effort: 'low',
-            promptVersion: 1,
+            promptVersion: 2,
             error: null,
         })
         expect(row?.content).toEqual({
@@ -172,6 +173,7 @@ describe('Application materials', () => {
             telegramMessage: `Hi! I made a checkout 2x as fast on Node.js. CV: ${link}\n\nAlex`,
             linkedinNote: answer.linkedinNote,
             whyMe: answer.whyMe,
+            answers: [],
         })
 
         const call = t.llm.calls.find(item => item.body.metadata?.purpose === 'materials')

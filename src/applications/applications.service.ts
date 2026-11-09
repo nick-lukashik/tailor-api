@@ -7,6 +7,7 @@ import { cursorCodec } from '../common/http/cursor.js'
 import { cvConfig } from '../config/config.js'
 import type { Db } from '../db/types.js'
 import { type ApplicationMaterials, materialsContentSchema } from '../materials/materials.schemas.js'
+import { applyFormSchema } from '../vacancies/apply-form.js'
 import { parsedVacancySchema } from '../vacancies/parse.schemas.js'
 import {
     type ApplicationDetailView,
@@ -191,6 +192,9 @@ export class ApplicationsService {
             updatedAt: row.vacancyUpdatedAt.toISOString(),
             model,
             parsed,
+            applyForm: applyFormSchema.safeParse(row.applyForm).data ?? null,
+            fetchStatus: row.fetchStatus ?? 'skipped',
+            fetchError: row.fetchError,
         }
     }
 

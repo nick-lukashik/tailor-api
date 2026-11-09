@@ -50,6 +50,13 @@
       "when": 1794211500065,
       "tag": "0006_materials",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794216225587,
+      "tag": "0007_vacancy_fetch",
+      "breakpoints": true
     }
   ]
 }

@@ -1,8 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { and, eq, inArray, or, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, or, sql } from 'drizzle-orm'
 import { DB } from '../common/database/database.js'
 import { applications, vacancies } from '../db/schema.js'
 import type { Db, Tx, VacancyRow } from '../db/types.js'
+import type { ApplyForm } from './apply-form.js'
 
 type PoolEntry = {
     applicationId: string
@@ -168,6 +169,78 @@ export class VacanciesRepository {
                 role: sql`case when ${applications.role} = '' then ${result.title} else ${applications.role} end`,
             })
             .where(and(eq(applications.vacancyId, id), or(...empty)))
+    }
+
+    /** The vacancies with a link back to `pending` before their fetch is queued; the ids of those that have one. */
+    async markFetchPending(tx: Tx, ids: string[]): Promise<string[]> {
+        if (ids.length === 0) return []
+        const rows = await tx
+            .update(vacancies)
+            .set({
+                fetchStatus: 'pending',
+                fetchError: null,
+                updatedAt: sql`now()`,
+            })
+            .where(and(inArray(vacancies.id, ids), isNotNull(vacancies.url)))
+            .returning({
+                id: vacancies.id,
+            })
+        return rows.map(row => row.id)
+    }
+
+    /**
+     * What the fetch got, in the caller's transaction. A text fills only an
+     * empty raw text (the person's own is kept) and makes the vacancy `pending`
+     * to parse; the form replaces the stored one unless it is left undefined
+     * (a failure keeps the last one). The parse status after the write.
+     */
+    async saveFetch(
+        tx: Tx,
+        id: string,
+        result: {
+            status: 'fetched' | 'failed' | 'skipped'
+            error: string | null
+            text: string
+            form?: ApplyForm | null
+        },
+    ): Promise<VacancyRow['parseStatus'] | undefined> {
+        const empty = sql`${vacancies.rawText} = ''`
+        const [row] = await tx
+            .update(vacancies)
+            .set({
+                fetchStatus: result.status,
+                fetchError: result.error,
+                ...(result.form !== undefined
+                    ? {
+                          applyForm: result.form,
+                      }
+                    : {}),
+                ...(result.text
+                    ? {
+                          rawText: sql`case when ${empty} then ${result.text} else ${vacancies.rawText} end`,
+                          parseStatus: sql`case when ${empty} then 'pending' else ${vacancies.parseStatus} end`,
+                          parseError: sql`case when ${empty} then null else ${vacancies.parseError} end`,
+                      }
+                    : {}),
+                updatedAt: sql`now()`,
+            })
+            .where(eq(vacancies.id, id))
+            .returning({
+                parseStatus: vacancies.parseStatus,
+            })
+        return row?.parseStatus
+    }
+
+    /** The link of a vacancy, null without one; undefined when there is no such vacancy. */
+    async urlOf(tx: Tx, id: string): Promise<string | null | undefined> {
+        const [row] = await tx
+            .select({
+                url: vacancies.url,
+            })
+            .from(vacancies)
+            .where(eq(vacancies.id, id))
+            .limit(1)
+        return row?.url
     }
 
     /** A vacancy pasted as text only: nothing to find it by, so always a new row. */

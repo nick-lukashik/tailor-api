@@ -42,6 +42,9 @@ export type ApplicationDetailView = ApplicationView & {
     rawText: VacancyRow['rawText'] | null
     parseError: VacancyRow['parseError']
     parsed: VacancyRow['parsed']
+    applyForm: VacancyRow['applyForm']
+    fetchStatus: VacancyRow['fetchStatus'] | null
+    fetchError: VacancyRow['fetchError']
     vacancyUpdatedAt: VacancyRow['updatedAt'] | null
 }
 
@@ -122,6 +125,9 @@ export class ApplicationsRepository {
                 rawText: vacancies.rawText,
                 parseError: vacancies.parseError,
                 parsed: vacancies.parsed,
+                applyForm: vacancies.applyForm,
+                fetchStatus: vacancies.fetchStatus,
+                fetchError: vacancies.fetchError,
                 vacancyUpdatedAt: vacancies.updatedAt,
             })
             .from(applications)

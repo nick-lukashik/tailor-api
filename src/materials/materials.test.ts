@@ -19,6 +19,7 @@ const answer: MaterialsAnswer = {
         'Owns what he builds',
         'A fourth point',
     ],
+    answers: [],
 }
 
 describe('materials language', () => {

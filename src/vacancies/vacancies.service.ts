@@ -1,11 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { z } from 'zod'
 import { DB } from '../common/database/database.js'
-import { notFound } from '../common/http/app-error.js'
+import { AppError, notFound } from '../common/http/app-error.js'
 import type { Db, VacancyRow } from '../db/types.js'
 import { vacancyUrlKey } from './url-key.js'
 import { VacanciesRepository } from './vacancies.repository.js'
-import type { VacancyIntake, VacancyIntakeResult, VacancyParseQueued } from './vacancies.schemas.js'
+import type { VacancyFetchQueued, VacancyIntake, VacancyIntakeResult, VacancyParseQueued } from './vacancies.schemas.js'
+import { VacancyFetchJob } from './vacancy-fetch.job.js'
 import { VacancyParseJob } from './vacancy-parse.job.js'
 
 const uuid = z.uuid()
@@ -16,12 +17,14 @@ export class VacanciesService {
         @Inject(DB) private readonly db: Db,
         private readonly repository: VacanciesRepository,
         private readonly parseJob: VacancyParseJob,
+        private readonly fetchJob: VacancyFetchJob,
     ) {}
 
     /**
      * Pasted vacancies into the caller's pool, one transaction for the batch.
-     * A parse is queued in the same transaction for every vacancy it created
-     * and every known one whose empty text it filled; they start `pending`.
+     * In the same transaction, every vacancy it created and every known one
+     * whose empty text it filled is queued: a fetch of its link first when it
+     * has one (the fetch queues the parse), else a parse; they start `pending`.
      */
     async intake(userId: string, input: VacancyIntake): Promise<VacancyIntakeResult> {
         const items = input.items.map(item => ({
@@ -48,6 +51,7 @@ export class VacanciesService {
                 else if (seen.rawText === '') seen.rawText = text
             }
             const toParse = new Set<string>()
+            const toFetch = new Set<string>()
             const byKey = new Map<string, VacancyRow>()
             for (const urlKey of [
                 ...linked.keys(),
@@ -60,7 +64,7 @@ export class VacanciesService {
                     createdBy: userId,
                 })
                 byKey.set(urlKey, vacancy)
-                if (changed) toParse.add(vacancy.id)
+                if (changed) toFetch.add(vacancy.id)
             }
 
             const results: VacancyIntakeResult['items'] = []
@@ -78,6 +82,9 @@ export class VacanciesService {
             }
             await this.parseJob.request(tx, [
                 ...toParse,
+            ])
+            await this.fetchJob.request(tx, [
+                ...toFetch,
             ])
             const created = results.filter(item => item.result === 'created').length
             return {
@@ -101,6 +108,23 @@ export class VacanciesService {
         return {
             vacancyId,
             parseStatus: 'pending',
+        }
+    }
+
+    /** Reads the link of a vacancy of the caller's pool again (404 outside it, 409 without a link); `pending` until then. */
+    async refetch(userId: string, vacancyId: string): Promise<VacancyFetchQueued> {
+        if (!uuid.safeParse(vacancyId).success) throw notFound('Vacancy')
+        await this.db.transaction(async tx => {
+            if (!(await this.repository.inPool(tx, userId, vacancyId))) throw notFound('Vacancy')
+            if (!(await this.repository.urlOf(tx, vacancyId)))
+                throw new AppError('CONFLICT', 'The vacancy has no link to fetch')
+            await this.fetchJob.request(tx, [
+                vacancyId,
+            ])
+        })
+        return {
+            vacancyId,
+            fetchStatus: 'pending',
         }
     }
 }

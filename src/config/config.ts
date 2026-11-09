@@ -51,3 +51,15 @@ export const storageConfig = registerAs('storage', () => ({
 export const cvConfig = registerAs('cv', () => ({
     publicUrl: env().CV_PUBLIC_URL.replace(/\/+$/, ''),
 }))
+
+const base = (url: string) => url.replace(/\/+$/, '')
+
+export const fetchConfig = registerAs('fetch', () => ({
+    enabled: env().VACANCY_FETCH_ENABLED,
+    allowPrivate: env().VACANCY_FETCH_ALLOW_PRIVATE,
+    greenhouseUrl: base(env().VACANCY_FETCH_GREENHOUSE_URL),
+    leverApiUrl: base(env().VACANCY_FETCH_LEVER_API_URL),
+    leverJobsUrl: base(env().VACANCY_FETCH_LEVER_JOBS_URL),
+    ashbyUrl: base(env().VACANCY_FETCH_ASHBY_URL),
+    workableUrl: base(env().VACANCY_FETCH_WORKABLE_URL),
+}))

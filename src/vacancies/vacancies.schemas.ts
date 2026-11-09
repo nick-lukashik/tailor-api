@@ -65,3 +65,13 @@ export const vacancyParseQueuedSchema = z
         id: 'VacancyParseQueued',
     })
 export type VacancyParseQueued = z.infer<typeof vacancyParseQueuedSchema>
+
+export const vacancyFetchQueuedSchema = z
+    .object({
+        vacancyId: z.uuid(),
+        fetchStatus: z.literal('pending'),
+    })
+    .meta({
+        id: 'VacancyFetchQueued',
+    })
+export type VacancyFetchQueued = z.infer<typeof vacancyFetchQueuedSchema>

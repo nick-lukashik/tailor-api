@@ -17,7 +17,9 @@ import { afterFailure, assignQueues, poolQueueName } from '../llm/model-pool.js'
 import { ModelPoolRepository } from '../llm/model-pool.repository.js'
 import { ProfileService } from '../profile/profile.service.js'
 import { cvDocumentSchema } from '../tex/cv-document.js'
+import { applyFormSchema } from '../vacancies/apply-form.js'
 import { parsedVacancySchema } from '../vacancies/parse.schemas.js'
+import { formAnswers, freeQuestions } from './form-answers.js'
 import { finishMaterials, materialsLanguage } from './materials.js'
 import { MATERIALS_PROMPT_VERSION, materialsSystemPrompt, materialsUserMessage } from './materials.prompts.js'
 import { MaterialsRepository } from './materials.repository.js'
@@ -241,6 +243,7 @@ export class MaterialsGenerateJob implements OnModuleInit, OnApplicationBootstra
         if (!profile) return fail('no_profile')
 
         const language = materialsLanguage(parsed.data, found.vacancy.rawText)
+        const form = applyFormSchema.safeParse(found.vacancy.applyForm).data ?? null
         const startedAt = performance.now()
         try {
             const answer = await this.llm.complete({
@@ -253,6 +256,7 @@ export class MaterialsGenerateJob implements OnModuleInit, OnApplicationBootstra
                     rawText: found.vacancy.rawText,
                     cv: document.data,
                     language,
+                    questions: freeQuestions(form, profile.document),
                 }),
                 schema: materialsAnswerSchema,
                 schemaName: 'application_materials',
@@ -265,6 +269,7 @@ export class MaterialsGenerateJob implements OnModuleInit, OnApplicationBootstra
                 content: finishMaterials(answer.output, {
                     cvUrl: `${this.cv.publicUrl}/${applicationId}/${found.cv.fileName}`,
                     language,
+                    answers: formAnswers(form, profile.document, answer.output.answers),
                 }),
                 promptVersion: MATERIALS_PROMPT_VERSION,
             })

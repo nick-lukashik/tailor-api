@@ -18,6 +18,7 @@ import { MaterialsModule } from './materials/materials.module.js'
 import { ProfileModule } from './profile/profile.module.js'
 import { StorageModule } from './storage/storage.module.js'
 import { VacanciesModule } from './vacancies/vacancies.module.js'
+import { VACANCY_FETCH_CONCURRENCY } from './vacancies/vacancy-fetch.job.js'
 
 type App = ConfigType<typeof appConfig>
 
@@ -78,12 +79,12 @@ type App = ConfigType<typeof appConfig>
             useFactory: (db: ConfigType<typeof dbConfig>, app: App, llm: ConfigType<typeof llmConfig>) => ({
                 connectionString: db.url,
                 applicationName: `${app.service}-jobs`,
-                // Above the parse, CV and materials jobs running at once (each model's concurrency), the legacy drain and sends.
+                // Above the fetch, parse, CV and materials jobs running at once (each model's concurrency), the legacy drain and sends.
                 max: [
                     ...llm.parseModels,
                     ...llm.cvModels,
                     ...llm.lettersModels,
-                ].reduce((sum, model) => sum + model.concurrency, 3),
+                ].reduce((sum, model) => sum + model.concurrency, 3 + VACANCY_FETCH_CONCURRENCY),
             }),
         }),
         AuthModule.forRootAsync({
