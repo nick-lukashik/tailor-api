@@ -27,7 +27,7 @@ describe('vacancy intake', () => {
         })
     const vacancyRows = (urlKey: string) => t.db.select().from(vacancies).where(eq(vacancies.urlKey, urlKey))
 
-    it('puts a batch into the pool in input order, unparsed', async () => {
+    it('puts a batch into the pool in input order, its parsing queued', async () => {
         const res = await intake([
             {
                 url: 'https://example.com/batch/1',
@@ -68,9 +68,13 @@ describe('vacancy intake', () => {
                     (await (await t.as()).get(`/api/v1/applications/${item.applicationId}`)).body,
             ),
         )
+        // A link without a text has nothing to parse yet: the job fails it with no_text at once.
         expect(first).toMatchObject({
             vacancyId: res.body.items[0].vacancyId,
-            parseStatus: 'pending',
+            parseStatus: expect.toBeOneOf([
+                'pending',
+                'failed',
+            ]),
             company: '',
             role: '',
             vacancyUrl: 'https://example.com/batch/1',

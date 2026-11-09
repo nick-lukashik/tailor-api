@@ -19,6 +19,12 @@ export const envSchema = baseEnvSchema
                 error: 'at least 32 characters (the INTERNAL_API_TOKEN of tailor-tex)',
             })
             .optional(),
+        /** The platform LLM gateway (OpenAI-compatible), its client key and the model that parses vacancies. */
+        LLM_GATEWAY_URL: z.url().default('http://llm-gateway.prod.svc'),
+        LLM_GATEWAY_KEY: z.string().min(32, {
+            error: 'at least 32 characters (the client key of tailor-api in llm-gateway)',
+        }),
+        LLM_PARSE_MODEL: z.string().min(1).max(100).default('claude-haiku-5-5'),
     })
 
 export type Env = z.output<typeof envSchema>

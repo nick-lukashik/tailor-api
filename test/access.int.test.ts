@@ -91,6 +91,7 @@ describe('access: id tokens and the tailor role', () => {
                 await as.put('/api/v1/profile').send({}),
                 await as.get('/api/v1/profile/schema'),
                 await as.get('/api/v1/profile/cv.pdf'),
+                await as.post('/api/v1/vacancies/019a5f00-0000-7000-8000-000000000001/parse'),
                 await as.post('/api/v1/vacancies/intake').send({
                     items: [
                         {

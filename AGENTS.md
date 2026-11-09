@@ -1,6 +1,6 @@
 # AGENTS.md
 
-The API of Tailor (Work Finder), created from `nest-starter`: HTTP, config, logs, health, metrics and PostgreSQL (Drizzle). Modules: `access` (id-api access tokens through `@nick-lukashik/auth`, the `tailor` role check, `GET /me`), `applications` (the person's pool: vacancies and what was sent to them, per user), `vacancies` (shared vacancy rows found by a normalized link, and the intake of pasted links and texts into the pool), `profile` (the person's profile document: sections in jsonb columns, versions, snapshots), `master-cv` (the profile as a PDF through tailor-tex, no vacancy) and `cv` (the CV of an application on `cv.<domain>/<application id>/<file name>`, a demo PDF for now). Redis, RabbitMQ (events through outbox/inbox) and pg-boss (jobs) are added only when the service uses them, copied from `nest-example` ("Add a capability" in `README.md`). The human-facing description is `README.md`.
+The API of Tailor (Work Finder), created from `nest-starter`: HTTP, config, logs, health, metrics and PostgreSQL (Drizzle). Modules: `access` (id-api access tokens through `@nick-lukashik/auth`, the `tailor` role check, `GET /me`), `applications` (the person's pool: vacancies and what was sent to them, per user), `vacancies` (shared vacancy rows found by a normalized link, the intake of pasted links and texts into the pool, and the `vacancy.parse` job), `llm` (the client of the platform LLM gateway), `profile` (the person's profile document: sections in jsonb columns, versions, snapshots), `master-cv` (the profile as a PDF through tailor-tex, no vacancy) and `cv` (the CV of an application on `cv.<domain>/<application id>/<file name>`, a demo PDF for now). pg-boss (jobs) is here for the parse job; Redis and RabbitMQ (events through outbox/inbox) are added only when the service uses them, copied from `nest-example` ("Add a capability" in `README.md`). The human-facing description is `README.md`.
 
 ## Commands
 
@@ -22,11 +22,13 @@ The API of Tailor (Work Finder), created from `nest-starter`: HTTP, config, logs
 - `src/profile/`: the profile document (`profile.schemas.ts`, strict Zod per section, cross-checks), `profiles` and `profile_snapshots`.
 - `src/tex/`: the tailor-tex client (`POST /api/v1/cv/render`, 60 s, errors mapped to 422/503/504) and `cv-document.ts`, a copy of tailor-tex's `CvDocument` schema: change both together.
 - `src/master-cv/`: `buildMasterCv` (pure: profile → `CvDocument`, unit-tested) and `GET /api/v1/profile/cv.pdf`.
+- `src/common/jobs/`: pg-boss (`PG_BOSS`, schema `pgboss`, stopped in `beforeApplicationShutdown`), a copy of nest-example's; `src/db/migrations.ts` installs its schema after the Drizzle migrations.
+- `src/llm/`: the LLM gateway client (`POST {LLM_GATEWAY_URL}/api/v1/chat/completions`, `json_schema` output checked by Zod, 120 s, `LlmCallError` with a short code: 5xx, 429, timeouts retryable, other 4xx not). Never log prompts, texts, answers or the key.
 - `src/request-budget.ts`: `@RequestBudget(ms)`, a route's own request budget; every other route keeps 10 s.
-- `src/vacancies/`: `vacancies` (one shared row per vacancy, `url_key` from `vacancyUrlKey`, pure and unit-tested; `parse_status` starts `pending`) and `POST /api/v1/vacancies/intake` (1–200 links and/or texts, one transaction: find or create the vacancy, then the caller's application for it).
+- `src/vacancies/`: `vacancies` (one shared row per vacancy, `url_key` from `vacancyUrlKey`, pure and unit-tested; `parse_status` starts `pending`) and `POST /api/v1/vacancies/intake` (1–200 links and/or texts, one transaction: find or create the vacancy, then the caller's application for it, and a `vacancy.parse` job for each new or newly filled text). `vacancy-parse.job.ts`: the job (`stately` per vacancy, retries with backoff; no text → `failed` `no_text`; the answer to `parsed`, `title`, `company` and the empty company and role of its applications in one transaction); `parse.prompt.ts` and `parse.schemas.ts`: the prompt and the answer's schema, change them together and bump `PARSE_PROMPT_VERSION`. `POST /api/v1/vacancies/:id/parse` re-queues it (202, 404 outside the caller's pool).
 - `src/applications/`: applications, schemas → repository → service → controller; list and get join `vacancyId` and `parseStatus` from `vacancies`. `src/cv/`: the CV of an application, `cv.<domain>/<application id>/<file name>`; the only routes reachable from the internet (`cv.<domain>`, rewritten to `/api/v1/cv/...` in gitops).
 - `drizzle/`: SQL migrations and `meta/` (generated, never edited by hand).
-- `test/`: integration tests and the harness; unit tests sit next to the code (`*.test.ts`).
+- `test/`: integration tests and the harness (stand-ins for id-api and llm-gateway: `identity.ts`, `llm-gateway.ts`); unit tests sit next to the code (`*.test.ts`).
 - `Dockerfile`, `.github/workflows/ci.yml`: the image and CI follow the [service runtime contract](https://github.com/nick-lukashik/.github/blob/master/docs/service-contract.md) (kind **api**); see "Deploy" in `README.md`.
 
 ## Conventions
@@ -53,7 +55,7 @@ The API of Tailor (Work Finder), created from `nest-starter`: HTTP, config, logs
 Short rules for each library, checked against the installed versions. Read the relevant file before changing code in that area.
 
 - `.claude/rules/nestjs.md`: NestJS 12, @nestjs/config, terminus, throttler, swagger (NestJS llms.txt).
-- Redis, RabbitMQ and pg-boss rules come with the capability: `.claude/rules/{redis,rabbitmq,pg-boss}.md` of nest-example.
+- `.claude/rules/pg-boss.md`: pg-boss 12 (copied from nest-example). Redis and RabbitMQ rules come with the capability: `.claude/rules/{redis,rabbitmq}.md` of nest-example.
 - `.claude/rules/zod.md`: Zod 4 (Zod llms.txt).
 - `.claude/rules/drizzle.md`: Drizzle ORM 0.45 and drizzle-kit 0.31 (Drizzle llms.txt).
 - `.claude/rules/pino.md`: pino 10 and nestjs-pino 5 (docs summary).
