@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { applicationStatuses } from '../db/schema.js'
+import { applicationStatuses, vacancyParseStatuses } from '../db/schema.js'
 
 /** The API contract of `applications`; OpenAPI is generated from these schemas. */
 export const applicationSchema = z
@@ -10,6 +10,10 @@ export const applicationSchema = z
         vacancyUrl: z.string().nullable(),
         vacancyText: z.string(),
         status: z.enum(applicationStatuses),
+        /** The shared vacancy behind it; null for one created by hand (POST /applications). */
+        vacancyId: z.uuid().nullable(),
+        /** The vacancy's parsing; null without a vacancy. */
+        parseStatus: z.enum(vacancyParseStatuses).nullable(),
         createdAt: z.iso.datetime(),
     })
     .meta({

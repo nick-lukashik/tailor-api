@@ -51,7 +51,7 @@ export async function startApp(overrides: Record<string, string> = {}) {
     await app.init()
 
     const db = app.get<Db>(DB)
-    await db.execute(sql`truncate applications, profiles, profile_snapshots`)
+    await db.execute(sql`truncate applications, vacancies, profiles, profile_snapshots`)
     await app.listen(0, '127.0.0.1')
     const { registry } = app.get(Metrics)
 

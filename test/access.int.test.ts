@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { TAILOR_ROLE } from '../src/access/tailor-role.guard.js'
-import { applications } from '../src/db/schema.js'
+import { applications, vacancies } from '../src/db/schema.js'
 import { OWNER, startApp, type TestApp } from './harness.js'
 
 const STRANGER = '019a5f00-0000-7000-8000-00000000c003'
@@ -91,6 +91,13 @@ describe('access: id tokens and the tailor role', () => {
                 await as.put('/api/v1/profile').send({}),
                 await as.get('/api/v1/profile/schema'),
                 await as.get('/api/v1/profile/cv.pdf'),
+                await as.post('/api/v1/vacancies/intake').send({
+                    items: [
+                        {
+                            url: 'https://example.com/jobs/nope',
+                        },
+                    ],
+                }),
             ]) {
                 expect(res.status, roles.join(',')).toBe(403)
                 expect(res.body).toEqual({
@@ -101,6 +108,7 @@ describe('access: id tokens and the tailor role', () => {
             }
         }
         expect(await t.db.$count(applications)).toBe(0)
+        expect(await t.db.$count(vacancies)).toBe(0)
     })
 
     it('lets in anyone whose token carries the role, among others', async () => {

@@ -2,7 +2,7 @@
 
 The API of Tailor: a vacancy in, a CV and a cover letter for it out, and the application tracked until an offer or a refusal. Its web app is [`tailor-web`](https://github.com/nick-lukashik/tailor-web) on `tailor.<domain>`; this API is internal to it, except the CV files on `cv.<domain>`.
 
-Created from [`nest-starter`](https://github.com/nick-lukashik/nest-starter) (`.template-version`). Modules: `access` (id-api access tokens and the `tailor` role), `applications` (the person's own; three demo rows without a person from migration `0001_demo_data`, listed to nobody), `profile` (the person's profile document, versions and snapshots), `master-cv` (a PDF of the profile without a vacancy, built by [`tailor-tex`](https://github.com/nick-lukashik/tailor-tex)) and `cv` (the CV of an application by its id; the same demo PDF for all, under each one's own file name). The pipeline and the CV files come with the logic.
+Created from [`nest-starter`](https://github.com/nick-lukashik/nest-starter) (`.template-version`). Modules: `access` (id-api access tokens and the `tailor` role), `applications` (the person's pool, their own; three demo rows without a person from migration `0001_demo_data`, listed to nobody), `vacancies` (one shared row per vacancy, found again by its normalized link; pasted links and texts go into the pool unparsed, `pending`), `profile` (the person's profile document, versions and snapshots), `master-cv` (a PDF of the profile without a vacancy, built by [`tailor-tex`](https://github.com/nick-lukashik/tailor-tex)) and `cv` (the CV of an application by its id; the same demo PDF for all, under each one's own file name). The pipeline and the CV files come with the logic.
 
 Redis, RabbitMQ (events through outbox/inbox) and pg-boss (jobs) are not here. When a feature needs one, copy it from [`nest-example`](https://github.com/nick-lukashik/nest-example) ("Add a capability" below). The shared code in `src/common/` is identical to the starter's, so a fix there is ported from the starter (`.github` `docs/templates.md`).
 
@@ -66,6 +66,7 @@ Every `/api/v1` route but `/api/v1/cv/*` needs `Authorization: Bearer <access to
 | `GET /api/v1/applications?limit=20&cursor=…`                                | `{ items: Application[], nextCursor: string \| null }`, the caller's, newest first                            |
 | `GET /api/v1/applications/:id`                                              | `Application` or 404                                                                                          |
 | `POST /api/v1/applications` `{ company, role?, vacancyUrl?, vacancyText? }` | 201 `Application` (status `new`), the caller's                                                                |
+| `POST /api/v1/vacancies/intake` `{ items: [{ url?, text? }] }`              | 200 `{ created, existing, items: [{ applicationId, vacancyId, result }] }` in input order (see below)         |
 | `GET /api/v1/profile`                                                       | `{ version, updatedAt, document }`; 404 before the first save                                                 |
 | `PUT /api/v1/profile` the whole document                                    | `{ version, sha256, updatedAt }`: version + 1 and a snapshot; 400 with every bad path; `{}` is an empty one   |
 | `GET /api/v1/profile/schema`                                                | JSON Schema (draft 2020-12) of the document, for editors                                                      |
@@ -76,6 +77,10 @@ Every `/api/v1` route but `/api/v1/cv/*` needs `Authorization: Bearer <access to
 | `GET /openapi.json`, `GET /docs`                                            | OpenAPI from the Zod schemas                                                                                  |
 
 Error body: `{ code, message, details?: { path, message }[], requestId }` with `code` one of `VALIDATION_FAILED` (400), `UNAUTHORIZED` (401), `FORBIDDEN` (403: signed in, no `tailor` role), `NOT_FOUND` (404), `PAYLOAD_TOO_LARGE` (413, body over 1 MiB), `UNPROCESSABLE` (422: the profile does not make a CV), `RATE_LIMITED` (429), `INTERNAL` (500), `UNAVAILABLE` (503: Postgres or tailor-tex over a time budget or down, retry later), `TIMEOUT` (504: the request exceeded its budget, 10 s unless the route has its own; a write may still have been applied).
+
+## Vacancy intake
+
+`POST /api/v1/vacancies/intake` takes 1–200 items, each a link (http/https, up to 2048), a raw text (up to 100 000) or both; an item with neither is a 400 at `items.<n>`. A vacancy is a shared row (`vacancies`), a person's application points at it (`applications.vacancy_id`, one per person and vacancy). In one transaction per request: a link is found again by its key (`vacancyUrlKey`: lowercase scheme and host, no `www.`, fragment, `utm_*`, `gclid`, `fbclid`, `ref`, `source`, `src`, `trk`, sorted params, no trailing slash) or creates the vacancy; a found vacancy with an empty text takes the item's text. A text without a link is always a new vacancy. Then the caller's application is created (`new`, company and role from the vacancy, empty until parsed) or reported `existing`. Nothing is parsed yet: `parseStatus` is `pending`; someone else's application stays a 404.
 
 ## Profile
 

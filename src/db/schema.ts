@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core'
+import { check, index, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import type { ProfileDocument } from '../profile/profile.schemas.js'
 
 /** Millisecond precision, so an ISO string from JSON round-trips exactly (cursors). */
@@ -18,8 +18,55 @@ export const applicationStatuses = [
     'rejected',
 ] as const
 
+/** Where the parsing of a vacancy is: every row starts `pending` until a model reads it. */
+export const vacancyParseStatuses = [
+    'pending',
+    'parsed',
+    'failed',
+] as const
+
 /**
- * A vacancy and what was sent to it (src/applications). The skeleton of
+ * A vacancy as pasted (src/vacancies): one shared row per vacancy, found again
+ * by its normalized link (`url_key`), so every person who adds it points at the
+ * same row. Title, company and `parsed` are filled by parsing later.
+ */
+export const vacancies = pgTable(
+    'vacancies',
+    {
+        id: uuid('id').primaryKey().default(sql`uuidv7()`),
+        /** The link as first given; null for a vacancy pasted as text only. */
+        url: text('url'),
+        /** `vacancyUrlKey(url)`: the same vacancy behind tracking params, `www.` or a trailing slash. */
+        urlKey: text('url_key'),
+        rawText: text('raw_text').notNull().default(''),
+        title: text('title').notNull().default(''),
+        company: text('company').notNull().default(''),
+        parseStatus: text('parse_status', {
+            enum: vacancyParseStatuses,
+        })
+            .notNull()
+            .default('pending'),
+        parsed: jsonb('parsed').$type<unknown>(),
+        parseError: text('parse_error'),
+        /** The person (`sub`) who added it first. */
+        createdBy: uuid('created_by').notNull(),
+        createdAt: at('created_at').notNull().defaultNow(),
+        updatedAt: at('updated_at').notNull().defaultNow(),
+    },
+    t => [
+        unique('vacancies_url_key_key').on(t.urlKey),
+        check('vacancies_url_with_key', sql`(${t.url} is null) = (${t.urlKey} is null)`),
+        check('vacancies_url_length', sql`char_length(${t.url}) <= 2048`),
+        check('vacancies_raw_text_length', sql`char_length(${t.rawText}) <= 100000`),
+        check('vacancies_title_length', sql`char_length(${t.title}) <= 200`),
+        check('vacancies_company_length', sql`char_length(${t.company}) <= 200`),
+        check('vacancies_parse_status', sql`${t.parseStatus} in ('pending', 'parsed', 'failed')`),
+        check('vacancies_parse_error_length', sql`char_length(${t.parseError}) <= 2000`),
+    ],
+)
+
+/**
+ * A vacancy in the pool of a person and what was sent to it (src/applications). The skeleton of
  * Tailor: the CV, the letter and the pipeline steps come with the logic.
  */
 export const applications = pgTable(
@@ -29,6 +76,11 @@ export const applications = pgTable(
         id: uuid('id').primaryKey().default(sql`uuidv7()`),
         /** The person (`sub` of the access token). Null only on the demo rows of 0001, which nobody lists. */
         userId: uuid('user_id'),
+        /** The shared vacancy row; null on rows created before the intake (POST /applications, the demo rows). */
+        vacancyId: uuid('vacancy_id').references(() => vacancies.id, {
+            onDelete: 'restrict',
+        }),
+        /** Empty until the vacancy is parsed. */
         company: text('company').notNull(),
         role: text('role').notNull().default(''),
         vacancyUrl: text('vacancy_url'),
@@ -43,7 +95,8 @@ export const applications = pgTable(
     t => [
         index('applications_created_at_id_idx').on(t.createdAt.desc(), t.id.desc()),
         index('applications_user_id_created_at_id_idx').on(t.userId, t.createdAt.desc(), t.id.desc()),
-        check('applications_company_length', sql`char_length(${t.company}) between 1 and 200`),
+        uniqueIndex('applications_user_id_vacancy_id_key').on(t.userId, t.vacancyId),
+        check('applications_company_length', sql`char_length(${t.company}) <= 200`),
         check('applications_role_length', sql`char_length(${t.role}) <= 200`),
         check('applications_vacancy_url_length', sql`char_length(${t.vacancyUrl}) <= 2048`),
         check('applications_vacancy_text_length', sql`char_length(${t.vacancyText}) <= 50000`),
