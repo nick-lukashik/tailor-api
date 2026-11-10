@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { applications, cvs, vacancies } from '../src/db/schema.js'
 import type { CvDocument } from '../src/tex/cv-document.js'
 import type { ParsedVacancy } from '../src/vacancies/parse.schemas.js'
-import { composition, parsed, scripted } from './fixtures/cv-answers.js'
+import { analysis, composition, parsed, scripted } from './fixtures/cv-answers.js'
 import { exampleProfile } from './fixtures/profile.js'
 import { OWNER, startApp, type TestApp } from './harness.js'
 import { completionOf, errorOf } from './llm-gateway.js'
@@ -103,13 +103,14 @@ describe('CV generation', () => {
             fileKey: `tailor/cv/${applicationId}/${row?.id}.pdf`,
             role: 'Senior Backend Engineer',
             effort: 'low',
-            promptVersion: 3,
+            promptVersion: 4,
             profileVersion: 1,
             aiRole: false,
             pages: 1,
             error: null,
         })
         expect(row?.analysis).toMatchObject({
+            vacancyKind: 'specific',
             aiRole: false,
             requirements: [
                 {
@@ -245,6 +246,46 @@ describe('CV generation', () => {
             status: 'ready',
             version: 2,
         })
+    })
+
+    it('gives a general vacancy the master CV as is, without the composition', async () => {
+        const applicationId = await parsedApplication(OWNER, 'parsed', {
+            ...parsed,
+            title: 'Talent pool',
+        })
+        t.llm.answer(
+            scripted({
+                cv_analysis: () =>
+                    completionOf({
+                        ...analysis,
+                        vacancyKind: 'general',
+                        vacancyKindReason: 'A talent pool with no concrete role.',
+                    }),
+            }),
+        )
+        await (await t.as()).post(`/api/v1/applications/${applicationId}/cv`)
+        await settled(applicationId).toBe('ready')
+        const [row] = await cvRows(applicationId)
+        expect(row).toMatchObject({
+            fileName: 'Alex-Example-Senior-Full-Stack-Engineer-CV.pdf',
+            promptVersion: 4,
+        })
+        expect(row?.analysis).toMatchObject({
+            vacancyKind: 'general',
+            vacancyKindReason: 'A talent pool with no concrete role.',
+        })
+        expect(t.llm.calls.map(call => call.body.metadata?.purpose).filter(purpose => purpose !== 'materials')).toEqual(
+            [
+                'cv-analyze',
+            ],
+        )
+
+        tex.reset()
+        const master = await (await t.as()).get('/api/v1/profile/cv.pdf')
+        expect(master.status).toBe(200)
+        expect(row?.document).toEqual(tex.calls[0]?.body.document)
+        const pdf = await download(t, `/api/v1/cv/${applicationId}/Alex-Example-Senior-Full-Stack-Engineer-CV.pdf`)
+        expect(Buffer.compare(pdf.body as Buffer, master.body as Buffer)).toBe(0)
     })
 
     it('refuses a new version with 409 before the vacancy is parsed or while one is being made', async () => {

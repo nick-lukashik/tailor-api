@@ -1,5 +1,5 @@
 import { caseCategories, type ProfileDocument } from '../profile/profile.schemas.js'
-import type { AnalysisAnswer, RequirementImportance } from './cv-generation.schemas.js'
+import type { AnalysisAnswer, RequirementImportance, VacancyKind } from './cv-generation.schemas.js'
 import { matchingStack } from './skills.js'
 
 /*
@@ -23,6 +23,9 @@ export type Match = {
 
 /** The analysis as stored on the CV (`cvs.analysis`) and used by the later steps. */
 export type Analysis = {
+    /** `general`: no concrete role or requirements to tailor to; the CV is the master CV as is. */
+    vacancyKind: VacancyKind
+    vacancyKindReason: string
     aiRole: boolean
     aiRoleReason: string
     requirements: Requirement[]
@@ -91,6 +94,8 @@ export function groundAnalysis(
         if (!before || before.match < grounded.match) pairs.set(key, grounded)
     }
     return {
+        vacancyKind: answer.vacancyKind,
+        vacancyKindReason: answer.vacancyKindReason.trim().slice(0, 300),
         modelAiRole: answer.aiRole,
         aiRoleReason: answer.aiRoleReason.trim().slice(0, 300),
         requirements,
@@ -267,7 +272,7 @@ export type EmploymentPlan = {
         item: ProfileCase
         score: number
     }[]
-    /** The code's pick: the best `target` cases, one per achievement group on the whole CV. */
+    /** The code's pick: the best `target` cases, one per achievement group on the whole CV, best first. */
     suggested: string[]
 }
 
@@ -287,9 +292,11 @@ export const tailoredEmployments = (profile: ProfileDocument, aiRole: boolean) =
 
 /**
  * Per employment: its quota (the AI one for an AI role, the general one
- * otherwise; every eligible case without a quota), its cases ranked by score
- * (plus the bonus for the vacancy's main stack),
- * and the code's suggestion the composition may revise.
+ * otherwise; every eligible case without a quota), its target capped by the
+ * eligible cases and the template's bullets, its cases ranked by score (plus
+ * the bonus for the vacancy's main stack), and the code's suggestion the
+ * composition may revise. The CV prints exactly `target` bullets; only the
+ * fit cuts below it, down to `min`.
  */
 export function planEmployments(profile: ProfileDocument, title: string, analysis: Analysis): EmploymentPlan[] {
     const role = roleProfile(title, analysis)
@@ -315,7 +322,7 @@ export function planEmployments(profile: ProfileDocument, title: string, analysi
                 score,
             }))
         const configured = employment.quota?.[analysis.aiRole ? 'ai' : 'general']
-        const target = Math.min(room, configured?.target ?? ranked.length)
+        const target = Math.min(room, ranked.length, configured?.target ?? ranked.length)
         const quota = {
             min: Math.min(target, configured?.min ?? 0),
             target,

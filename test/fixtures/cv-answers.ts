@@ -39,6 +39,8 @@ export const parsed: ParsedVacancy = {
 }
 
 export const analysis: AnalysisAnswer = {
+    vacancyKind: 'specific',
+    vacancyKindReason: 'A senior backend role with a concrete stack.',
     aiRole: false,
     aiRoleReason: 'A backend role.',
     requirements: [

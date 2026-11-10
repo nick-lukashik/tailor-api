@@ -15,8 +15,20 @@ export const requirementImportances = [
 ] as const
 export type RequirementImportance = (typeof requirementImportances)[number]
 
-/** Step 1: the vacancy's requirements, which cases evidence them, and whether it is an AI role (D-115). */
+export const vacancyKinds = [
+    'general',
+    'specific',
+] as const
+export type VacancyKind = (typeof vacancyKinds)[number]
+
+/**
+ * Step 1: whether the vacancy is general (a talent pool, an open application:
+ * the master CV as is), its requirements, which cases evidence them, and
+ * whether it is an AI role (D-115).
+ */
 export const analysisAnswerSchema = z.strictObject({
+    vacancyKind: z.enum(vacancyKinds),
+    vacancyKindReason: z.string(),
     aiRole: z.boolean(),
     aiRoleReason: z.string(),
     requirements: z.array(

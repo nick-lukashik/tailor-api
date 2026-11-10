@@ -4,6 +4,8 @@ import { type Analysis, decideAiRole, groundAnalysis, planEmployments, tailoredE
 import { tailoredSummarySource } from './compose.js'
 
 const analysis = (aiRole: boolean, extra: Partial<Analysis> = {}): Analysis => ({
+    vacancyKind: 'specific',
+    vacancyKindReason: '',
     aiRole,
     aiRoleReason: '',
     requirements: [
@@ -91,6 +93,8 @@ describe('the analysis', () => {
         const profile = aiProfile()
         const grounded = groundAnalysis(
             {
+                vacancyKind: 'general',
+                vacancyKindReason: ' A talent pool. ',
                 aiRole: false,
                 aiRoleReason: ' A backend role. ',
                 requirements: [
@@ -183,9 +187,11 @@ describe('the analysis', () => {
             },
         ])
         expect(grounded.aiRoleReason).toBe('A backend role.')
+        expect(grounded.vacancyKind).toBe('general')
+        expect(grounded.vacancyKindReason).toBe('A talent pool.')
     })
 
-    it('ranks the evidenced case first, within the quota, one per achievement group, a limited case only when named', () => {
+    it('ranks the evidenced case first, the target capped by the candidates, one per group, a limited case only when named', () => {
         const profile = aiProfile()
         profile.cases.push(
             exampleCase('c3', 'acme', {
@@ -207,9 +213,10 @@ describe('the analysis', () => {
             }),
         )
         expect(acme?.ranked[0]?.item.id).toBe('c2')
+        // The quota's 5 capped by the two eligible cases.
         expect(acme?.quota).toEqual({
-            min: 3,
-            target: 5,
+            min: 2,
+            target: 2,
         })
         // c3 shares c2's group; c1 competes only when the vacancy mentions performance.
         expect(acme?.suggested).toEqual([
