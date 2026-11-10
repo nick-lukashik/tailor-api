@@ -64,7 +64,7 @@ describe('composing a CV from the cases', () => {
         expect(cleanText(' A\nline\t with  spaces ', 100)).toBe('A line with spaces')
     })
 
-    it("keeps the model's choice within the quota, drops cases of another employment, tops up to the minimum", () => {
+    it("keeps the model's choice, drops cases of another employment or a used group, tops up to the target", () => {
         const profile = aiProfile()
         const acme = profile.employments.find(item => item.id === 'acme')
         if (!acme) throw new Error('no acme')
@@ -122,12 +122,15 @@ describe('composing a CV from the cases', () => {
                 },
             ],
         )
+        // m1 shares a4's group; the top-up follows the suggestion in rank order.
         expect(job?.bullets.map(bullet => bullet.caseId)).toEqual([
             'a4',
             'a2',
+            'a3',
         ])
         expect(job?.bullets[0]?.variants.full).toBe('Rewritten a4.')
         expect(job?.bullets[1]?.sourced).toBe(true)
+        expect(job?.minBullets).toBe(2)
 
         const [suggestedOnly] = composeJobs(
             [
@@ -140,6 +143,83 @@ describe('composing a CV from the cases', () => {
             'a2',
             'a3',
         ])
+    })
+
+    it("prints exactly the target: the model's first cases when it gives more, never more than the candidates", () => {
+        const profile = aiProfile()
+        const acme = profile.employments.find(item => item.id === 'acme')
+        if (!acme) throw new Error('no acme')
+        const cases = [
+            'b1',
+            'b2',
+            'b3',
+            'b4',
+        ].map(id => exampleCase(id, 'acme'))
+        const plan = (target: number, ids = cases): EmploymentPlan => ({
+            employment: acme,
+            quota: {
+                min: 1,
+                target,
+            },
+            ranked: ids.map((item, index) => ({
+                item,
+                score: 10 - index,
+            })),
+            suggested: ids.slice(0, target).map(item => item.id),
+        })
+        const chosen = (ids: string[]) => [
+            {
+                employmentId: 'acme',
+                bullets: ids.map(caseId => ({
+                    caseId,
+                    full: `Rewritten ${caseId}.`,
+                    compact: `${caseId}.`,
+                    minimal: `${caseId}.`,
+                })),
+            },
+        ]
+        const ids = (job?: TailoredJob) => job?.bullets.map(bullet => bullet.caseId)
+
+        const [more] = composeJobs(
+            [
+                plan(2),
+            ],
+            chosen([
+                'b4',
+                'b3',
+                'b1',
+            ]),
+        )
+        expect(ids(more)).toEqual([
+            'b4',
+            'b3',
+        ])
+        expect(more?.bullets.every(bullet => !bullet.sourced)).toBe(true)
+
+        const [fewer] = composeJobs(
+            [
+                plan(3),
+            ],
+            chosen([
+                'b3',
+            ]),
+        )
+        expect(ids(fewer)).toEqual([
+            'b3',
+            'b1',
+            'b2',
+        ])
+
+        const [capped] = composeJobs(
+            [
+                plan(2, cases.slice(0, 1)),
+            ],
+            chosen([]),
+        )
+        expect(ids(capped)).toEqual([
+            'b1',
+        ])
+        expect(capped?.minBullets).toBe(1)
     })
 
     it('adapts the summary but keeps its figures, and the AI paragraph only for an AI role', () => {

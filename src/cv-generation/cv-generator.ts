@@ -30,8 +30,9 @@ import {
 } from './cv.prompts.js'
 import { analysisAnswerSchema, compositionAnswerSchema } from './cv-generation.schemas.js'
 import { fitCv } from './fitting.js'
+import { buildGeneralCv, generalContent } from './general-cv.js'
 import { missingSkills, normalizeVacancySkills } from './skills.js'
-import { buildTailoredCv, bulletId, initialFitState } from './tailored-cv.js'
+import { buildTailoredCv, bulletId, type FitState, initialFitState } from './tailored-cv.js'
 import { cvTitle } from './title.js'
 
 /**
@@ -89,8 +90,9 @@ function texFailure(error: unknown): never {
  * The pipeline of one CV version, ported from Work Finder's resume
  * generation (generate-v2.ts): (1) the vacancy's requirements against the
  * case bank, (2) the composition, (3) the document in code, (4) the fit in
- * tailor-tex, (5) the PDF to R2. Two model calls; prompts, texts and answers
- * are never logged.
+ * tailor-tex, (5) the PDF to R2. A general vacancy skips (2) and takes the
+ * master CV as the document (`general-cv.ts`). Two model calls at most;
+ * prompts, texts and answers are never logged.
  */
 @Injectable()
 export class CvGenerator {
@@ -122,12 +124,15 @@ export class CvGenerator {
         })
         const grounded = groundAnalysis(answer.output, profile.cases)
         const analysis: Analysis = {
+            vacancyKind: grounded.vacancyKind,
+            vacancyKindReason: grounded.vacancyKindReason,
             aiRole: decideAiRole(title, grounded.modelAiRole),
             aiRoleReason: grounded.aiRoleReason,
             requirements: grounded.requirements,
             matches: grounded.matches,
         }
         await input.onAnalysis(analysis)
+        if (analysis.vacancyKind === 'general') return this.general(input)
 
         const plans = planEmployments(profile, title, analysis)
         const summary = tailoredSummarySource(profile, analysis.aiRole)
@@ -180,12 +185,6 @@ export class CvGenerator {
             vacancyTitle: title,
             headline: cvHeadline(profile),
         })
-        const caseIndex = new Map(
-            profile.cases.map((item, index) => [
-                item.id,
-                index,
-            ]),
-        )
         const meta = {
             headline,
             keywords: [
@@ -193,7 +192,54 @@ export class CvGenerator {
                 ...profile.skills.flatMap(row => row.items.filter(item => item.core).map(item => item.name)),
             ],
         }
-        const build = (state: ReturnType<typeof initialFitState>) => buildTailoredCv(profile, content, state, meta)
+        const build = (state: FitState) => buildTailoredCv(profile, content, state, meta)
+        const cv = await this.finish(input, content, build, headline)
+        const missing = missingSkills(content.skills, vacancySkills)
+        if (missing.length)
+            this.logger.warn(
+                {
+                    cvId: input.cvId,
+                    missing: missing.length,
+                },
+                'Vacancy skills missing from the CV',
+            )
+        return {
+            ...cv,
+            sourcedBullets: content.jobs.flatMap(job => job.bullets).filter(bullet => bullet.sourced).length,
+            unchangedBullets: changes.unchanged,
+        }
+    }
+
+    /** A general vacancy: the master CV as is, fitted to the pages, named from the profile's headline. */
+    private async general(input: GenerationInput): Promise<GeneratedCv> {
+        const content = generalContent(input.profile)
+        const cv = await this.finish(
+            input,
+            content,
+            state => buildGeneralCv(input.profile, content, state),
+            cvHeadline(input.profile),
+        )
+        return {
+            ...cv,
+            sourcedBullets: 0,
+            unchangedBullets: 0,
+        }
+    }
+
+    /** Steps 3 to 5 of either path: the document checked, fitted, rendered and stored. */
+    private async finish(
+        input: GenerationInput,
+        content: TailoredContent,
+        build: (state: FitState) => CvDocument,
+        headline: string,
+    ): Promise<Omit<GeneratedCv, 'sourcedBullets' | 'unchangedBullets'>> {
+        const { profile } = input
+        const caseIndex = new Map(
+            profile.cases.map((item, index) => [
+                item.id,
+                index,
+            ]),
+        )
         const issues = masterCvIssues(build(initialFitState()))
         if (issues.length) {
             this.logger.warn(
@@ -251,15 +297,6 @@ export class CvGenerator {
             if (error instanceof StorageError) throw new CvGenerationError(error.code, error.retryable)
             throw error
         })
-        const missing = missingSkills(content.skills, vacancySkills)
-        if (missing.length)
-            this.logger.warn(
-                {
-                    cvId: input.cvId,
-                    missing: missing.length,
-                },
-                'Vacancy skills missing from the CV',
-            )
         return {
             document: fit.document,
             fileKey,
@@ -268,8 +305,6 @@ export class CvGenerator {
             pages: rendered.pages ?? fit.measurement.pages,
             builds: fit.builds,
             nearMiss: fit.nearMiss,
-            sourcedBullets: content.jobs.flatMap(job => job.bullets).filter(bullet => bullet.sourced).length,
-            unchangedBullets: changes.unchanged,
         }
     }
 }

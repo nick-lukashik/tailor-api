@@ -112,6 +112,36 @@ export const cvEmployments = (profile: ProfileDocument) =>
         .filter(({ employment }) => !employment.aiOnly)
         .sort((a, b) => a.employment.order - b.employment.order || a.index - b.index)
 
+/** Bullets a job prints at most (the template's 20, fixed bullets first); jobs at most 10. */
+const JOB_BULLETS_MAX = 20
+const JOBS_MAX = 10
+
+/**
+ * The employments of the master CV with the cases each prints: active, in the
+ * profile's order, up to the general quota's target, one per achievement group.
+ */
+export function masterCases(profile: ProfileDocument) {
+    const usedGroups = new Set<string>()
+    return cvEmployments(profile)
+        .slice(0, JOBS_MAX)
+        .map(({ employment, index }) => {
+            const quota = employment.quota ? employment.quota.general.target : Number.POSITIVE_INFINITY
+            const picked: ProfileDocument['cases'] = []
+            for (const item of profile.cases) {
+                if (picked.length >= quota) break
+                if (item.employmentId !== employment.id || !item.active) continue
+                if (item.achievementGroup && usedGroups.has(item.achievementGroup)) continue
+                if (item.achievementGroup) usedGroups.add(item.achievementGroup)
+                picked.push(item)
+            }
+            return {
+                employment,
+                index,
+                cases: picked.slice(0, Math.max(0, JOB_BULLETS_MAX - employment.fixedBullets.length)),
+            }
+        })
+}
+
 function jobs(profile: ProfileDocument): CvDocument['jobs'] {
     const caseIndex = new Map(
         profile.cases.map((item, index) => [
@@ -119,17 +149,7 @@ function jobs(profile: ProfileDocument): CvDocument['jobs'] {
             index,
         ]),
     )
-    const usedGroups = new Set<string>()
-    return cvEmployments(profile).map(({ employment, index }) => {
-        const quota = employment.quota ? employment.quota.general.target : Number.POSITIVE_INFINITY
-        const picked: ProfileDocument['cases'] = []
-        for (const item of profile.cases) {
-            if (picked.length >= quota) break
-            if (item.employmentId !== employment.id || !item.active) continue
-            if (item.achievementGroup && usedGroups.has(item.achievementGroup)) continue
-            if (item.achievementGroup) usedGroups.add(item.achievementGroup)
-            picked.push(item)
-        }
+    return masterCases(profile).map(({ employment, index, cases: picked }) => {
         const bullets = [
             ...employment.fixedBullets.map((text, position) => ({
                 id: `fixed-${index}-${position}`,
@@ -146,7 +166,7 @@ function jobs(profile: ProfileDocument): CvDocument['jobs'] {
             dates: cvDates(employment.start, employment.end),
             location: employment.location,
             description: employment.company.description,
-            bullets: bullets.slice(0, 20),
+            bullets: bullets.slice(0, JOB_BULLETS_MAX),
         }
     })
 }
@@ -196,7 +216,7 @@ export function buildMasterCv(profile: ProfileDocument): CvDocument {
             }))
             .filter(row => row.items.length)
             .slice(0, 14),
-        jobs: jobs(profile).slice(0, 10),
+        jobs: jobs(profile),
         pdf: {
             title: '',
             subject: headline ? `${headline} CV` : '',

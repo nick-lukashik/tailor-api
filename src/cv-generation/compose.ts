@@ -7,7 +7,7 @@ import { skillKey, type TailoredSkillRow, tailorSkills, textSkillKeys, type Vaca
  * The composition applied in code (Work Finder's composition policy and
  * source fallback): every bullet is a case of its employment, kept by id;
  * a rewrite that breaks a rule takes the case's own text instead of failing
- * the CV; the counts stay within the quotas.
+ * the CV; each employment prints exactly its quota's target.
  */
 
 type ProfileCase = ProfileDocument['cases'][number]
@@ -130,11 +130,12 @@ export function bulletVariants(
 }
 
 /**
- * The bullets of each employment: the model's choice, in its order, of the
- * employment's own ranked cases, one per achievement group on the whole CV,
- * at most the quota's target; topped up to its minimum from the code's
- * suggestion, then the ranking, with the cases' own text. An employment the
- * model left out gets the suggestion.
+ * The bullets of each employment, exactly the quota's target: the model's
+ * choice, in its order, of the employment's own ranked cases, one per
+ * achievement group on the whole CV, its first `target` only; topped up to
+ * the target from the code's suggestion, then the ranking, in rank order,
+ * with the cases' own text. An employment the model left out gets the
+ * suggestion. Only the fit prints fewer, down to the minimum.
  */
 export function composeJobs(plans: EmploymentPlan[], answer: CompositionAnswer['employments']): TailoredJob[] {
     const usedCases = new Set<string>()
@@ -164,12 +165,11 @@ export function composeJobs(plans: EmploymentPlan[], answer: CompositionAnswer['
             })
         }
         if (own) for (const bullet of own.bullets) add(bullet.caseId.trim(), bullet)
-        const fill = own ? plan.quota.min : plan.quota.target
         for (const caseId of [
             ...plan.suggested,
             ...plan.ranked.map(entry => entry.item.id),
         ]) {
-            if (bullets.length >= fill) break
+            if (bullets.length >= plan.quota.target) break
             add(caseId)
         }
         return {
